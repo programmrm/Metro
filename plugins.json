@@ -1,0 +1,127 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziBox.cs3",
+        "status": 1,
+        "version": 31,
+        "name": "DiziBox",
+        "internalName": "DiziBox",
+        "authors": [
+            "programmer"
+        ],
+        "description": "DiziBox — yabancı dizilerin yeni ve eski sezonlarını full hd izleyebileceğiniz platform.",
+        "fileSize": 32000,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-896d3343b1c9ef09ccbacc84aa85946e5b58242cacf18cfc0af7b5b5f2065ab1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziPal.cs3",
+        "status": 1,
+        "version": 91,
+        "name": "DiziPal",
+        "internalName": "DiziPal",
+        "authors": [
+            "programmer",
+            "muratcesmecioglu"
+        ],
+        "description": "DiziPal — en yeni dizileri güvenli ve hızlı şekilde sunar.",
+        "fileSize": 27728,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-1810eaba2991d45d9aaf38d947c7b289e563db8e84c4fbb9a45f140e4d1cf62c"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziPalOriginal.cs3",
+        "status": 1,
+        "version": 69,
+        "name": "DiziPalOriginal",
+        "internalName": "DiziPalOriginal",
+        "authors": [
+            "programmer",
+            "muratcesmecioglu"
+        ],
+        "description": "DiziPalOriginal — en yeni dizileri güvenli ve hızlı şekilde sunar.",
+        "fileSize": 30605,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-7a6a34dfbca6cad40f294be8c410310b795de039a0edcc4ae0e17f262e876d87"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/Dizilla.cs3",
+        "status": 1,
+        "version": 98,
+        "name": "Dizilla",
+        "internalName": "Dizilla",
+        "authors": [
+            "programmer"
+        ],
+        "description": "Dizilla — yabancı dizileri Türkçe dublaj ve altyazılı olarak 1080p kalitede sunar.",
+        "fileSize": 48975,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-8a8fe4da340c83118364f743fe67fe883fd7c0259e5b67770f3c428b61d868bb"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/FilmHdCehennemi.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "FilmHdCehennemi",
+        "internalName": "FilmHdCehennemi",
+        "authors": [
+            "programmer"
+        ],
+        "description": "HDFilmCehennemi — en yeni filmleri ve yabancı dizileri full HD kalitede izleyin.",
+        "fileSize": 35656,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=hdfilmcehennemi.nl&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-595108a1ca550f5b587c134c6ff601908dfa7b59046cc93ea3d7e409670193d7"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/FullHDFilmizlesene.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "FullHDFilmizlesene",
+        "internalName": "FullHDFilmizlesene",
+        "authors": [
+            "programmer"
+        ],
+        "description": "FullHDFilmizlesene — en yeni filmleri full HD kalitede izleyin.",
+        "fileSize": 22668,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.now&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-b9d36e48d1747c22b0a448de11e65d03d37559c45eab2193c958d36858a020ae"
+    }
+]
