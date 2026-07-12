@@ -1,0 +1,107 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziBox.cs3",
+        "status": 1,
+        "version": 24,
+        "name": "DiziBox",
+        "internalName": "DiziBox",
+        "authors": [
+            "programmer"
+        ],
+        "description": "DiziBox platformu.",
+        "fileSize": 21945,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-2381c1b46695fed8664b8b7220074605227ab5ec2927189a6720e1071ac47efe"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/Dizilla.cs3",
+        "status": 1,
+        "version": 97,
+        "name": "Dizilla",
+        "internalName": "Dizilla",
+        "authors": [
+            "programmer"
+        ],
+        "description": "Dizilla platformu.",
+        "fileSize": 44585,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-727897da71993015f8009f51ee39c97a5e4df190c8e9279ffda4dca8e0b9bcd1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziPal.cs3",
+        "status": 1,
+        "version": 91,
+        "name": "DiziPal",
+        "internalName": "DiziPal",
+        "authors": [
+            "programmer",
+            "muratcesmecioglu"
+        ],
+        "description": "DiziPal platformu.",
+        "fileSize": 27734,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-854dd6f7ce59f74565914628b84ffd96becfd3b99b86f75876fb2ab4ef07c936"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziPalOriginal.cs3",
+        "status": 1,
+        "version": 68,
+        "name": "DiziPalOriginal",
+        "internalName": "DiziPalOriginal",
+        "authors": [
+            "programmer",
+            "muratcesmecioglu"
+        ],
+        "description": "DiziPalOriginal platformu.",
+        "fileSize": 25366,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-3a38f0892aece176b55fe4faf1308a7eefbc6bea1f8b5560f03d57d97b2437de"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/FilmHdCehennemi.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "FilmHdCehennemi",
+        "internalName": "FilmHdCehennemi",
+        "authors": [
+            "programmer"
+        ],
+        "description": "HDFilmCehennemi — en yeni filmleri ve yabancı dizileri full HD kalitede izleyin.",
+        "fileSize": 30621,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=hdfilmcehennemi.nl&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-eaf07c21fb495ec4ef818893707e0f618f1ed0eb4a042f7eec625076ac62fdeb"
+    }
+]
