@@ -1,0 +1,88 @@
+# Bu arac @keyiflerolsun tarafindan | @KekikAkademi icin yazilmistir.
+name: CloudStream Compiler
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.yml"
+      - "**/*.jpg"
+      - "**/*.png"
+      - "**/*.py"
+
+jobs:
+  CloudStreamCompiler:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: "Check out src repository"
+        uses: actions/checkout@v6
+        with:
+          path: "src"
+
+      - name: "Check out build repository"
+        uses: actions/checkout@v6
+        with:
+          ref: "builds"
+          path: "builds"
+
+      - name: Clear Old Builds and Folders
+        run: |
+          cd $GITHUB_WORKSPACE/builds
+          # Mevcut olan tum eski gereksiz alt klasorleri temizler
+          find . -maxdepth 1 -type d ! -name '.' ! -name '.git' -exec rm -rf {} +
+          # Eski cs3 dosyalarini siler
+          rm -f *.cs3 || true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: false
+
+      - name: Build Plugins
+        run: |
+          cd $GITHUB_WORKSPACE/src
+          chmod +x gradlew
+          
+          # Hatalı eklentiler varsa atlayıp digerlerini derlemeye devam etmesi icin --continue eklendi
+          ./gradlew make makePluginsJson --continue || true
+          
+          # .cs3 dosyalarini klasor yapisini bozarak dogrudan ana dizine kopyalar
+          find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
+          
+          # Eger olustuysa plugins.json dosyasini kopyalar
+          if [ -f "build/plugins.json" ]; then
+            cp build/plugins.json $GITHUB_WORKSPACE/builds/
+          fi
+
+      - name: Update Repository Info
+        run: |
+          # Hata vermemesi icin dosyalarin varligi kontrol edilerek sed islemi yapilir
+          if [ -f "$GITHUB_WORKSPACE/builds/plugins.json" ]; then
+            sed -i 's/@KekikAkademi/@programmrm/g' $GITHUB_WORKSPACE/builds/plugins.json
+          fi
+          if [ -f "$GITHUB_WORKSPACE/builds/repo.json" ]; then
+            sed -i 's/@KekikAkademi/@prg/g' $GITHUB_WORKSPACE/builds/repo.json
+          fi
+
+      - name: Push Compiled Plugins
+        run: |
+          cd $GITHUB_WORKSPACE/builds
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add .
+          git commit --amend -m "${{ github.sha }} Derlemesi" || git commit -m "${{ github.sha }} Derlemesi" || true
+          git push --force origin builds

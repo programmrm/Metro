@@ -1,0 +1,15 @@
+      - name: Build Plugins
+        run: |
+          cd $GITHUB_WORKSPACE/src
+          chmod +x gradlew
+          
+          # 1. Eklentileri derle
+          ./gradlew make makePluginsJson --continue || true
+          
+          # 2. Tum alt klasorlerdeki .cs3 dosyalarini BUL ve klasorsuz olarak dogrudan kopyala
+          find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
+          
+          # 3. Ana build klasorundeki plugins.json dosyasini kopyala
+          if [ -f "build/plugins.json" ]; then
+            cp build/plugins.json $GITHUB_WORKSPACE/builds/
+          fi

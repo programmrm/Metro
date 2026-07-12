@@ -1,0 +1,8 @@
+{
+    "name": "Turkish Providers Repository | @prgrammrm",
+    "description": "Türkçe içerikli eklenti havuzu",
+    "manifestVersion": 1,
+    "pluginLists": [
+      "https://raw.githubusercontent.com/programmrm/Kekik-cloudstream/master/builds/plugins.json"
+    ]
+}
