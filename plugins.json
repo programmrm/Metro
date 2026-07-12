@@ -1,0 +1,126 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziBox.cs3",
+        "status": 1,
+        "version": 24,
+        "name": "DiziBox",
+        "internalName": "DiziBox",
+        "authors": [
+            "programmer"
+        ],
+        "description": "DiziBox platformu.",
+        "fileSize": 21945,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-2381c1b46695fed8664b8b7220074605227ab5ec2927189a6720e1071ac47efe"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/Dizilla.cs3",
+        "status": 1,
+        "version": 97,
+        "name": "Dizilla",
+        "internalName": "Dizilla",
+        "authors": [
+            "programmer"
+        ],
+        "description": "Dizilla platformu.",
+        "fileSize": 44330,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-7ed41f9bb4b14b2c18f2a6b836dc58c95fe8dc3f8c3a0c2404aa70c6aa1c315a"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziPal.cs3",
+        "status": 1,
+        "version": 91,
+        "name": "DiziPal",
+        "internalName": "DiziPal",
+        "authors": [
+            "programmer",
+            "muratcesmecioglu"
+        ],
+        "description": "DiziPal platformu.",
+        "fileSize": 27734,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-4230d0bc76e6c2e6631c525831da4fcdc8db72a335c78db8fcc10ff60f2abc85"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziPalOriginal.cs3",
+        "status": 1,
+        "version": 68,
+        "name": "DiziPalOriginal",
+        "internalName": "DiziPalOriginal",
+        "authors": [
+            "programmer",
+            "muratcesmecioglu"
+        ],
+        "description": "DiziPalOriginal platformu.",
+        "fileSize": 25365,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-9a42605adac7992f705c724575ef54bf653d4ad3d6c7a21a8f4d35f77640fee2"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziSt.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "DiziSt",
+        "internalName": "DiziSt",
+        "authors": [
+            "programmer"
+        ],
+        "description": "Dizist platformu.",
+        "fileSize": 29490,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=dizist.live&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-6a441b9274751d2d7c84985d9b575cded9b3fd219f0f7cc4217fb8ed6e6af6a1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/DiziYabancıDizi.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "DiziYabancıDizi",
+        "internalName": "DiziYabancıDizi",
+        "authors": [
+            "programmer"
+        ],
+        "description": "YabancıDizi platformu.",
+        "fileSize": 18615,
+        "repositoryUrl": "https://github.com/programmrm/Metro",
+        "language": "tr",
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=yabancidizi.life&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-f526e4efb68a3c8fe63955bddc546ed1cc7da8066f651e3844f7c13db3973c84"
+    }
+]
