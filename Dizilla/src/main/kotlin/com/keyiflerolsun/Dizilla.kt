@@ -51,10 +51,11 @@ class Dizilla : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/?page=1" to "En Son Sezon",
+        "${mainUrl}/?page=1" to "Güncel Bölümler",
         "${mainUrl}/?page=2" to "Yeni Eklenenler",
         "${mainUrl}/?page=3" to "Popüler",
-        "${mainUrl}/?page=4" to "Trend"
+        "${mainUrl}/?page=4" to "Trend",
+        "${mainUrl}/?page=5" to "En Son Sezon"
     )
 
     private val mapper by lazy {
@@ -164,6 +165,7 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
             val data = mapper.readTree(decrypted)
 
             val catKey = when (request.name) {
+                "Güncel Bölümler" -> "getEpisodesOnBrandAll"
                 "Yeni Eklenenler" -> "getLastSeriesAll"
                 "Popüler" -> "allPopularSeries"
                 "Trend" -> "getTrendSeries"
