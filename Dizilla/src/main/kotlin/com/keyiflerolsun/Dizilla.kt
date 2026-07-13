@@ -374,9 +374,14 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
                                 val title = sources.get(0).get("title")?.asText() ?: "Kaynak ${i + 1}"
                                 val m3u8 = file.replace("m.php", "master.m3u8")
                                 callback.invoke(
-                                    newExtractorLink(name, "${this.name} - $title", m3u8) {
-                                        referer = "$baseUrl/"
-                                        quality = Qualities.Unknown.value
+                                    newExtractorLink(
+                                        source = this.name,
+                                        name = "${this.name} - $title",
+                                        url = m3u8,
+                                        type = ExtractorLinkType.M3U8
+                                    ) {
+                                        this.referer = "$baseUrl/"
+                                        this.quality = Qualities.Unknown.value
                                     }
                                 )
                                 found = true
