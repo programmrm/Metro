@@ -352,8 +352,10 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
             val cleanedSource = sourceContent.replace("\\", "")
             val iframe = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(cleanedSource)?.groupValues?.get(1) ?: return false
 
-            Log.d("DZL", "iframe » $iframe")
-            loadExtractor(iframe, "${mainUrl}/", subtitleCallback, callback)
+            val fixedIframe = if (iframe.startsWith("//")) "https:$iframe" else iframe
+
+            Log.d("DZL", "iframe » $fixedIframe")
+            loadExtractor(fixedIframe, "${mainUrl}/", subtitleCallback, callback)
             true
         } catch (e: Exception) {
             Log.e("DZL", "loadLinks error: ${e.message}")
