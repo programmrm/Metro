@@ -84,14 +84,18 @@ class Dizilla : MainAPI() {
                 ?: item.get("used_slug")?.asText()
                 ?: continue
             val cleanSlug = slug.removePrefix("dizi/")
-            val rawPoster = item.get("face_url")?.asText()
-                ?: item.get("poster_url")?.asText()
-                ?: item.get("brand_url")?.asText()
-                ?: item.get("square_url")?.asText()
-                ?: item.get("poster")?.asText()
-                ?: item.get("image")?.asText()
-                ?: item.get("poster_path")?.asText()
-                ?: item.get("object_poster_url")?.asText()
+            val posterCandidates = listOfNotNull(
+                item.get("face_url")?.asText(),
+                item.get("poster_url")?.asText(),
+                item.get("brand_url")?.asText(),
+                item.get("square_url")?.asText(),
+                item.get("poster")?.asText(),
+                item.get("image")?.asText(),
+                item.get("poster_path")?.asText(),
+                item.get("object_poster_url")?.asText()
+            )
+            val rawPoster = posterCandidates.firstOrNull { !it.contains("cdn.ampproject.org") }
+                ?: posterCandidates.firstOrNull()
 
             val poster = when {
                 rawPoster.isNullOrEmpty() -> null
@@ -190,12 +194,17 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
                         url,
                         TvType.TvSeries
                     ) {
-                        val rawPoster = item.get("face_url")?.asText()
-                            ?: item.get("poster_url")?.asText()
-                            ?: item.get("brand_url")?.asText()
-                            ?: item.get("square_url")?.asText()
-                            ?: item.get("poster")?.asText()
-                            ?: item.get("image")?.asText()
+                        val posterCandidates = listOfNotNull(
+                            item.get("face_url")?.asText(),
+                            item.get("poster_url")?.asText(),
+                            item.get("brand_url")?.asText(),
+                            item.get("square_url")?.asText(),
+                            item.get("poster")?.asText(),
+                            item.get("image")?.asText()
+                        )
+                        val rawPoster = posterCandidates.firstOrNull { 
+                            !it.isNullOrEmpty() && !it.contains("cdn.ampproject.org")
+                        } ?: posterCandidates.firstOrNull { !it.isNullOrEmpty() }
                         this.posterUrl = when {
                             rawPoster.isNullOrEmpty() -> null
                             rawPoster.startsWith("http") -> rawPoster
@@ -254,12 +263,16 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
                 ?: document.selectFirst("h1")?.text()
                 ?: return null
 
-            val posterPath = contentItem?.get("face_url")?.asText()
-                ?: contentItem?.get("poster_url")?.asText()
-                ?: contentItem?.get("brand_url")?.asText()
-                ?: contentItem?.get("square_url")?.asText()
-                ?: data.get("poster_path")?.asText()
-                ?: data.get("poster")?.asText()
+            val posterCandidates = listOfNotNull(
+                contentItem?.get("face_url")?.asText(),
+                contentItem?.get("poster_url")?.asText(),
+                contentItem?.get("brand_url")?.asText(),
+                contentItem?.get("square_url")?.asText(),
+                data.get("poster_path")?.asText(),
+                data.get("poster")?.asText()
+            )
+            val posterPath = posterCandidates.firstOrNull { !it.contains("cdn.ampproject.org") }
+                ?: posterCandidates.firstOrNull()
             val poster = when {
                 posterPath.isNullOrEmpty() -> fixUrlNull(document.selectFirst("img[alt*='$title']")?.attr("src"))
                 posterPath.startsWith("http") -> posterPath
