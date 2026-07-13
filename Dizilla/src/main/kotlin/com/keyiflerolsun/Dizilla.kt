@@ -51,10 +51,10 @@ class Dizilla : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/?page=1" to "Yeni Eklenenler",
-        "${mainUrl}/?page=2" to "Popüler",
-        "${mainUrl}/?page=3" to "Trend",
-        "${mainUrl}/?page=4" to "En Son Sezon"
+        "${mainUrl}/?page=1" to "En Son Sezon",
+        "${mainUrl}/?page=2" to "Yeni Eklenenler",
+        "${mainUrl}/?page=3" to "Popüler",
+        "${mainUrl}/?page=4" to "Trend"
     )
 
     private val mapper by lazy {
