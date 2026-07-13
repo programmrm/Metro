@@ -82,10 +82,14 @@ class Dizilla : MainAPI() {
             val slug = item.get("slug")?.asText()
                 ?: item.get("used_slug")?.asText()
                 ?: continue
-            val rawPoster = item.get("poster")?.asText()
+            val cleanSlug = slug.removePrefix("dizi/")
+            val rawPoster = item.get("face_url")?.asText()
+                ?: item.get("poster_url")?.asText()
+                ?: item.get("brand_url")?.asText()
+                ?: item.get("square_url")?.asText()
+                ?: item.get("poster")?.asText()
                 ?: item.get("image")?.asText()
                 ?: item.get("poster_path")?.asText()
-                ?: item.get("poster_url")?.asText()
                 ?: item.get("object_poster_url")?.asText()
 
             val poster = when {
@@ -95,7 +99,7 @@ class Dizilla : MainAPI() {
                 else -> "$mainUrl/$rawPoster"
             }
 
-result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeries) {
+result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.TvSeries) {
                 this.posterUrl = poster
                 this.posterHeaders = commonHeaders
             })
@@ -186,6 +190,8 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeri
                     ) {
                         this.posterUrl = item.get("face_url")?.asText()
                             ?: item.get("poster_url")?.asText()
+                            ?: item.get("brand_url")?.asText()
+                            ?: item.get("square_url")?.asText()
                             ?: item.get("poster")?.asText()
                             ?: item.get("image")?.asText()
                         this.posterHeaders = commonHeaders
