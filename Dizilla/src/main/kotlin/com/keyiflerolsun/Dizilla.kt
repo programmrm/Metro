@@ -26,10 +26,6 @@ class Dizilla : MainAPI() {
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.TvSeries)
 
-    override var sequentialMainPage = true
-    override var sequentialMainPageDelay = 150L
-    override var sequentialMainPageScrollDelay = 150L
-
     private val cloudflareKiller by lazy { CloudflareKiller() }
     private val interceptor by lazy { CloudflareInterceptor(cloudflareKiller) }
 
@@ -37,34 +33,16 @@ class Dizilla : MainAPI() {
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept-Encoding" to "gzip, deflate, br",
-        "Referer" to mainUrl,
-        "Origin" to mainUrl,
-        "Connection" to "keep-alive",
-        "Sec-Fetch-Dest" to "empty",
-        "Sec-Fetch-Mode" to "cors",
-        "Sec-Fetch-Site" to "same-origin",
-        "Cache-Control" to "max-age=0",
-        "Upgrade-Insecure-Requests" to "1"
+        "Referer" to mainUrl
     )
 
     private val apiCookies = mapOf("showAllDaFull" to "true")
-
-    private val imageHeaders = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer" to mainUrl,
-        "Accept" to "image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Sec-Fetch-Dest" to "image",
-        "Sec-Fetch-Mode" to "no-cors",
-        "Sec-Fetch-Site" to "same-origin"
-    )
 
     class CloudflareInterceptor(private val cloudflareKiller: CloudflareKiller) : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
             val request = chain.request()
             val response = chain.proceed(request)
             val doc = Jsoup.parse(response.peekBody(1024 * 1024).string())
-
             if (doc.html().contains("verifying")) {
                 return cloudflareKiller.intercept(chain)
             }
@@ -119,7 +97,7 @@ class Dizilla : MainAPI() {
 
 result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeries) {
                 this.posterUrl = poster
-                this.posterHeaders = imageHeaders
+                this.posterHeaders = commonHeaders
             })
         }
         return result
@@ -210,7 +188,7 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeri
                             ?: item.get("poster_url")?.asText()
                             ?: item.get("poster")?.asText()
                             ?: item.get("image")?.asText()
-                        this.posterHeaders = imageHeaders
+                        this.posterHeaders = commonHeaders
                     }
                 )
             }
@@ -332,7 +310,7 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeri
 
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
-                this.posterHeaders = imageHeaders
+                this.posterHeaders = commonHeaders
                 this.year = year
                 this.plot = description
                 this.tags = tags
