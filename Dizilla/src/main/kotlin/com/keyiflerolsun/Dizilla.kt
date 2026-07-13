@@ -188,12 +188,18 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
                         url,
                         TvType.TvSeries
                     ) {
-                        this.posterUrl = item.get("face_url")?.asText()
+                        val rawPoster = item.get("face_url")?.asText()
                             ?: item.get("poster_url")?.asText()
                             ?: item.get("brand_url")?.asText()
                             ?: item.get("square_url")?.asText()
                             ?: item.get("poster")?.asText()
                             ?: item.get("image")?.asText()
+                        this.posterUrl = when {
+                            rawPoster.isNullOrEmpty() -> null
+                            rawPoster.startsWith("http") -> rawPoster
+                            rawPoster.startsWith("/") -> "$mainUrl$rawPoster"
+                            else -> "$mainUrl/$rawPoster"
+                        }
                         this.posterHeaders = commonHeaders
                     }
                 )
