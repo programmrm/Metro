@@ -196,12 +196,14 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeri
             for (i in 0 until arr.size()) {
                 val item = arr.get(i) ?: continue
                 val slug = item.get("used_slug")?.asText()
+                    ?: item.get("episode_used_slug")?.asText()
                     ?: item.get("slug")?.asText()
                     ?: continue
+                val url = if (slug.startsWith("dizi/") || slug.startsWith("/")) fixUrl(slug) else "$mainUrl/$slug"
                 items.add(
                     newTvSeriesSearchResponse(
                         item.get("original_title")?.asText() ?: item.get("culture_title")?.asText() ?: continue,
-                        fixUrl("/dizi/$slug"),
+                        url,
                         TvType.TvSeries
                     ) {
                         this.posterUrl = item.get("face_url")?.asText()
