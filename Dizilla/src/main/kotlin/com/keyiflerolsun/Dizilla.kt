@@ -195,14 +195,19 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$slug"), TvType.TvSeri
             val items = mutableListOf<SearchResponse>()
             for (i in 0 until arr.size()) {
                 val item = arr.get(i) ?: continue
-                val slug = item.get("used_slug")?.asText() ?: continue
-items.add(
+                val slug = item.get("used_slug")?.asText()
+                    ?: item.get("slug")?.asText()
+                    ?: continue
+                items.add(
                     newTvSeriesSearchResponse(
                         item.get("original_title")?.asText() ?: item.get("culture_title")?.asText() ?: continue,
-                        "$mainUrl/$slug",
+                        fixUrl("/dizi/$slug"),
                         TvType.TvSeries
                     ) {
-                        this.posterUrl = item.get("face_url")?.asText() ?: item.get("poster_url")?.asText()
+                        this.posterUrl = item.get("face_url")?.asText()
+                            ?: item.get("poster_url")?.asText()
+                            ?: item.get("poster")?.asText()
+                            ?: item.get("image")?.asText()
                         this.posterHeaders = imageHeaders
                     }
                 )
