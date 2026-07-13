@@ -358,38 +358,38 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
 
             val videoId = Regex("""v=([^&]+)""").find(fixedIframe)?.groupValues?.get(1)
             if (videoId != null) {
-                val baseUrl = Regex("""https?://[^/]+""").find(fixedIframe)?.value ?: return@try false
-                val sourceUrl = "$baseUrl/source2.php?v=$videoId"
-                try {
-                    val jsonText = app.get(sourceUrl, headers = commonHeaders, referer = mainUrl).text
-                    val root = mapper.readTree(jsonText)
-                    val playlist = root.get("playlist")
-                    if (playlist != null && playlist.isArray) {
-                        var found = false
-                        for (i in 0 until playlist.size()) {
-                            val item = playlist.get(i)
-                            val sources = item.get("sources")
-                            if (sources != null && sources.isArray && sources.size() > 0) {
-                                val file = sources.get(0).get("file")?.asText() ?: continue
-                                val title = sources.get(0).get("title")?.asText() ?: "Kaynak ${i + 1}"
-                                val m3u8 = file.replace("m.php", "master.m3u8")
-                                callback.invoke(
-                                    newExtractorLink(
-                                        source = this.name,
-                                        name = "${this.name} - $title",
-                                        url = m3u8,
-                                        type = ExtractorLinkType.M3U8
-                                    ) {
-                                        this.referer = "$baseUrl/"
-                                        this.quality = Qualities.Unknown.value
-                                    }
-                                )
-                                found = true
+                val baseUrl = Regex("""https?://[^/]+""").find(fixedIframe)?.value
+                if (baseUrl != null) {
+                    val sourceUrl = "$baseUrl/source2.php?v=$videoId"
+                    try {
+                        val jsonText = app.get(sourceUrl, headers = commonHeaders, referer = mainUrl).text
+                        val root = mapper.readTree(jsonText)
+                        val playlist = root.get("playlist")
+                        if (playlist != null && playlist.isArray) {
+                            for (i in 0 until playlist.size()) {
+                                val item = playlist.get(i)
+                                val sources = item.get("sources")
+                                if (sources != null && sources.isArray && sources.size() > 0) {
+                                    val file = sources.get(0).get("file")?.asText() ?: continue
+                                    val title = sources.get(0).get("title")?.asText() ?: "Kaynak ${i + 1}"
+                                    val m3u8 = file.replace("m.php", "master.m3u8")
+                                    callback.invoke(
+                                        newExtractorLink(
+                                            source = this.name,
+                                            name = "${this.name} - $title",
+                                            url = m3u8,
+                                            type = ExtractorLinkType.M3U8
+                                        ) {
+                                            this.referer = "$baseUrl/"
+                                            this.quality = Qualities.Unknown.value
+                                        }
+                                    )
+                                }
                             }
+                            return true
                         }
-                        if (found) return@try true
-                    }
-                } catch (_: Exception) { }
+                    } catch (_: Exception) { }
+                }
             }
 
             loadExtractor(fixedIframe, "${mainUrl}/", subtitleCallback, callback)
