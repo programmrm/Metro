@@ -403,6 +403,15 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
             if (videoId != null) {
                 val baseUrl = Regex("""https?://[^/]+""").find(fixedIframe)?.value
                 if (baseUrl != null) {
+                    try {
+                        val iframeHtml = app.get(fixedIframe, referer = mainUrl).text
+                        Regex(""""file":"([^"]+)","label":"([^"]+)"""").findAll(iframeHtml).forEach {
+                            val (subUrl, subLang) = it.destructured
+                            val lang = subLang.replace("\\u0131", "ı").replace("\\u0130", "İ").replace("\\u00fc", "ü").replace("\\u00e7", "ç")
+                            subtitleCallback.invoke(SubtitleFile(lang, subUrl.replace("\\", "")))
+                        }
+                    } catch (_: Exception) { }
+
                     val sourceUrl = "$baseUrl/source2.php?v=$videoId"
                     try {
                         val jsonText = app.get(sourceUrl, headers = commonHeaders, referer = mainUrl).text
