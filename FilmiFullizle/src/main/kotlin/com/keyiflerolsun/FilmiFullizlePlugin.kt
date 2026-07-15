@@ -5,9 +5,8 @@ import com.lagradost.cloudstream3.plugins.Plugin
 import android.content.Context
 
 @CloudstreamPlugin
-class FullHDFilmPlugin: Plugin() {
+class FilmiFullizlePlugin: Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(FullHDFilm())
-        registerExtractorAPI(YildizKisaFilm())
+        registerMainAPI(FilmiFullizle())
     }
 }
