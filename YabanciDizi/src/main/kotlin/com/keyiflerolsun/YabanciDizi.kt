@@ -18,7 +18,7 @@ class YabanciDizi : MainAPI() {
     override val hasMainPage          = true
     override var lang                 = "tr"
     override val hasQuickSearch       = false
-    override val supportedTypes       = setOf(TvType.TvSeries, TvType.AsianDrama, TvType.Anime)
+    override val supportedTypes       = setOf(TvType.TvSeries, TvType.Movie, TvType.AsianDrama, TvType.Anime)
 
     override var sequentialMainPage        = true
     override var sequentialMainPageDelay       = 50L
@@ -55,11 +55,9 @@ class YabanciDizi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        mainUrl to "Yeni Eklenen Dizi Bölümleri",
-        "${mainUrl}/yabanci-diziler" to "Yabancı Diziler",
-        "${mainUrl}/asyadizileri" to "Asya Dizileri",
-        "${mainUrl}/animeler" to "Animeler",
-        "${mainUrl}/arsiv" to "Arşiv"
+        mainUrl to "Yeni Eklenenler",
+        "${mainUrl}/dizi-izle-hd" to "Tüm Diziler",
+        "${mainUrl}/film-izle-hd" to "Filmler"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -67,88 +65,163 @@ class YabanciDizi : MainAPI() {
         val url = if (page <= 1) request.data else "${request.data}?page=$page"
         val document = app.get(url, interceptor = interceptor).document
 
-        if (request.name == "Yeni Eklenen Dizi Bölümleri") {
-            val sections = mutableListOf<HomePageList>()
-            val sectionTitles = listOf(
-                "lastSeriesEp" to "Yeni Eklenen Dizi Bölümleri",
-                "lastAsiaEp" to "Yeni Eklenen Asya Bölümleri",
-                "lastAsiaSeries" to "Yeni Eklenen Asya Dizileri",
-                "lastAnimeEp" to "Yeni Eklenen Anime Bölümleri",
-                "lastAnimeSeries" to "Yeni Eklenen Animeler",
-                "lastEpisodes" to "Popüler Diziler"
-            )
+        when (request.data) {
+            mainUrl -> {
+                val sections = mutableListOf<HomePageList>()
 
-            for ((id, title) in sectionTitles) {
-                val items = document.select("div#result_$id > div.poster-mb-bx")
-                    .ifEmpty { document.select("div.area:has(div#result_$id) div.poster-mb-bx") }
-                    .ifEmpty { document.select("div.poster-mb-bx") }
-                    .ifEmpty { document.select("div[class*='poster'] a[href*='/dizi/']").mapNotNull { it.parent() } }
-                    .ifEmpty { document.select("a[href*='/dizi/'] > img, a[href*='/dizi/'] > picture").mapNotNull { it.parent() } }
-                    .ifEmpty {
-                        document.select("a[href*='/dizi/']").mapNotNull { link ->
-                            if (link.selectFirst("img") != null) link else null
-                        }
+                val homeSections = document.select("div.dark-segment")
+                for (section in homeSections) {
+                    val titleEl = section.selectFirst("div.segment-title, h2.segment-title")
+                    val title = titleEl?.text()?.trim() ?: continue
+                    if (title.isBlank()) continue
+
+                    val items = parseHomeSection(section)
+                    if (items.isNotEmpty()) {
+                        sections.add(HomePageList(title, items))
                     }
-                    .mapNotNull { it.toSearchResult() }
-
-                if (items.isNotEmpty()) {
-                    sections.add(HomePageList(title, items))
                 }
-            }
 
-            if (sections.isEmpty()) {
-                val home = document.select("div.poster-mb-bx").mapNotNull { it.toSearchResult() }
-                if (home.isEmpty()) {
-                    val items = document.select("a[href*='/dizi/']").mapNotNull { link ->
+                if (sections.isEmpty()) {
+                    val fallback = document.select("li.mofy-moviesli").mapNotNull { it.toSearchResult() }
+                    if (fallback.isNotEmpty()) return newHomePageResponse("Son Eklenenler", fallback)
+
+                    val fallback2 = document.select("li.segment-poster-sm a[href*='/dizi/'], li.segment-poster-sm a[href*='/film/']").mapNotNull { link ->
+                        val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+                        val title = link.attr("title").ifEmpty { link.text().trim() }
+                        if (title.isBlank()) return@mapNotNull null
+                        val posterUrl = fixUrlNull(link.selectFirst("img")?.let { img ->
+                            img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                                ?: img.attr("data-src").takeIf { it.isNotBlank() }
+                        })
+                        val type = if (href.contains("/dizi/")) TvType.TvSeries else TvType.Movie
+                        newTvSeriesSearchResponse(title, href, type) { this.posterUrl = posterUrl }
+                    }
+                    if (fallback2.isNotEmpty()) return newHomePageResponse("Öne Çıkanlar", fallback2)
+                }
+
+                if (sections.isEmpty()) {
+                    val allLinks = document.select("a[href*='/dizi/'], a[href*='/film/']").mapNotNull { link ->
                         if (link.selectFirst("img") == null) return@mapNotNull null
                         val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
                         val title = link.attr("title").ifEmpty { link.text().trim() }
                         if (title.isBlank()) return@mapNotNull null
-                        val posterUrl = fixUrlNull(link.selectFirst("img")?.attr("src") ?: link.selectFirst("img")?.attr("data-src"))
+                        val posterUrl = fixUrlNull(link.selectFirst("img")?.let { img ->
+                            img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                                ?: img.attr("data-src").takeIf { it.isNotBlank() }
+                        })
+                        val type = if (href.contains("/dizi/")) TvType.TvSeries else TvType.Movie
+                        newTvSeriesSearchResponse(title, href, type) { this.posterUrl = posterUrl }
+                    }
+                    return newHomePageResponse("Popüler", allLinks)
+                }
+
+                return newHomePageResponse(sections)
+            }
+
+            "${mainUrl}/film-izle-hd" -> {
+                val items = mutableListOf<SearchResponse>()
+                val sections = document.select("div.dark-segment")
+                for (section in sections) {
+                    val titleEl = section.selectFirst("div.segment-title, h2.segment-title")
+                    val secTitle = titleEl?.text()?.trim() ?: continue
+                    val secItems = parseHomeSection(section)
+                    if (secItems.isNotEmpty()) {
+                        items.addAll(secItems)
+                    }
+                }
+                if (items.isEmpty()) {
+                    val movieItems = document.select("li.mofy-moviesli").mapNotNull { it.toSearchResult() }
+                    return newHomePageResponse(request.name, movieItems)
+                }
+                return newHomePageResponse(request.name, items)
+            }
+
+            else -> {
+                val items = mutableListOf<SearchResponse>()
+
+                val seriesItems = document.select("li.segment-poster-sm").mapNotNull { el ->
+                    val link = el.selectFirst("a[href*='/dizi/']") ?: return@mapNotNull null
+                    val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+                    val title = link.attr("title").ifEmpty {
+                        el.selectFirst("h2")?.text()?.trim() ?: return@mapNotNull null
+                    }
+                    val posterUrl = fixUrlNull(el.selectFirst("img")?.let { img ->
+                        img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                            ?: img.attr("data-src").takeIf { it.isNotBlank() }
+                    })
+                    newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+                }
+                items.addAll(seriesItems)
+
+                if (items.isEmpty()) {
+                    val allLinks = document.select("a[href*='/dizi/']").mapNotNull { link ->
+                        if (link.selectFirst("img") == null) return@mapNotNull null
+                        val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+                        val title = link.attr("title").ifEmpty { link.text().trim() }
+                        if (title.isBlank()) return@mapNotNull null
+                        val posterUrl = fixUrlNull(link.selectFirst("img")?.let { img ->
+                            img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                                ?: img.attr("data-src").takeIf { it.isNotBlank() }
+                        })
                         newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
                     }
-                    return newHomePageResponse("Popüler", items)
+                    return newHomePageResponse(request.name, allLinks)
                 }
-                return newHomePageResponse("Popüler", home)
-            }
 
-            return newHomePageResponse(sections)
-        }
-
-        val home = document.select("div.poster-mb-bx").mapNotNull { it.toSearchResult() }
-        if (home.isEmpty()) {
-            val items = document.select("a[href*='/dizi/']").mapNotNull { link ->
-                if (link.selectFirst("img") == null) return@mapNotNull null
-                val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
-                val title = link.attr("title").ifEmpty { link.text().trim() }
-                if (title.isBlank()) return@mapNotNull null
-                val posterUrl = fixUrlNull(link.selectFirst("img")?.attr("src") ?: link.selectFirst("img")?.attr("data-src"))
-                newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+                return newHomePageResponse(request.name, items)
             }
-            return newHomePageResponse(request.name, items)
         }
-        return newHomePageResponse(request.name, home)
     }
 
-    private fun Element.toSearchResult(): SearchResponse? {
-        val linkEl = this.selectFirst("a[href*='/dizi/']") ?: return null
-        val href = fixUrlNull(linkEl.attr("href")) ?: return null
-        val title = linkEl.attr("title").ifEmpty {
-            this.selectFirst("h2")?.text()?.trim() ?: return null
-        }
+    private fun parseHomeSection(section: Element): List<SearchResponse> {
+        val items = mutableListOf<SearchResponse>()
 
-        val posterUrl = fixUrlNull(this.selectFirst("img")?.let { img ->
-            img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
-        })
+        val movieItems = section.select("li.mofy-moviesli").mapNotNull { it.toSearchResult() }
+        items.addAll(movieItems)
 
-        val type = when {
-            href.contains("/dizi/") -> TvType.TvSeries
-            else -> TvType.Movie
+        val posterItems = section.select("li.segment-poster-sm").mapNotNull { el ->
+            val link = el.selectFirst("a[href*='/dizi/'], a[href*='/film/']") ?: return@mapNotNull null
+            val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+            val title = link.attr("title").ifEmpty {
+                el.selectFirst("h2")?.text()?.trim() ?: return@mapNotNull null
+            }
+            val posterUrl = fixUrlNull(el.selectFirst("img")?.let { img ->
+                img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                    ?: img.attr("data-src").takeIf { it.isNotBlank() }
+            })
+            val type = if (href.contains("/dizi/")) TvType.TvSeries else TvType.Movie
+            newTvSeriesSearchResponse(title, href, type) { this.posterUrl = posterUrl }
         }
+        items.addAll(posterItems)
 
-        return newTvSeriesSearchResponse(title, href, type) {
-            this.posterUrl = posterUrl
+        val featuredItems = section.select("div.poster a[href*='/dizi/'], div.poster a[href*='/film/']").mapNotNull { link ->
+            val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+            val title = link.attr("title").ifEmpty {
+                link.selectFirst("h2")?.text()?.trim() ?: return@mapNotNull null
+            }
+            val posterUrl = fixUrlNull(link.selectFirst("img")?.let { img ->
+                img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                    ?: img.attr("data-src").takeIf { it.isNotBlank() }
+            })
+            val type = if (href.contains("/dizi/")) TvType.TvSeries else TvType.Movie
+            newTvSeriesSearchResponse(title, href, type) { this.posterUrl = posterUrl }
         }
+        items.addAll(featuredItems)
+
+        val plainLinks = section.select("a[href*='/dizi/'], a[href*='/film/']").mapNotNull { link ->
+            val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+            val title = link.attr("title").ifEmpty { link.text().trim() }
+            if (title.isBlank() || href.contains("tur/") || href.contains("kategori/") || href.contains("koleksiyon/")) return@mapNotNull null
+            val posterUrl = fixUrlNull(link.selectFirst("img")?.let { img ->
+                img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                    ?: img.attr("data-src").takeIf { it.isNotBlank() }
+            })
+            val type = if (href.contains("/dizi/")) TvType.TvSeries else TvType.Movie
+            newTvSeriesSearchResponse(title, href, type) { this.posterUrl = posterUrl }
+        }
+        items.addAll(plainLinks)
+
+        return items.distinctBy { it.url }.take(50)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -179,7 +252,7 @@ class YabanciDizi : MainAPI() {
 
                 if (json.data?.state == true && !json.data?.html.isNullOrBlank()) {
                     val doc = Jsoup.parse(json.data!!.html)
-                    return doc.select("a[href*='/dizi/']").mapNotNull { el ->
+                    return doc.select("a[href*='/dizi/'], a[href*='/film/']").mapNotNull { el ->
                         val itemHref = fixUrlNull(el.attr("href")) ?: return@mapNotNull null
                         val itemTitle = el.attr("title").ifEmpty { el.text().trim() }
                         if (itemTitle.isBlank()) return@mapNotNull null
@@ -189,7 +262,8 @@ class YabanciDizi : MainAPI() {
                                 ?: img.attr("data-src").takeIf { it.isNotBlank() }
                         })
 
-                        newTvSeriesSearchResponse(itemTitle, itemHref, TvType.TvSeries) {
+                        val type = if (itemHref.contains("/dizi/")) TvType.TvSeries else TvType.Movie
+                        newTvSeriesSearchResponse(itemTitle, itemHref, type) {
                             this.posterUrl = posterUrl
                         }
                     }
@@ -203,9 +277,41 @@ class YabanciDizi : MainAPI() {
     }
 
     private suspend fun searchFallback(query: String): List<SearchResponse> {
-        val doc = app.get("${mainUrl}/yabanci-diziler", interceptor = interceptor).document
-        return doc.select("div.poster-mb-bx").mapNotNull { it.toSearchResult() }
-            .filter { it.name.contains(query, ignoreCase = true) }
+        val doc = app.get("${mainUrl}/dizi-izle-hd", interceptor = interceptor).document
+        return doc.select("a[href*='/dizi/']").mapNotNull { link ->
+            val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+            val title = link.attr("title").ifEmpty { link.text().trim() }
+            if (title.isBlank()) return@mapNotNull null
+            if (!title.contains(query, ignoreCase = true)) return@mapNotNull null
+            val posterUrl = fixUrlNull(link.selectFirst("img")?.let { img ->
+                img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                    ?: img.attr("data-src").takeIf { it.isNotBlank() }
+            })
+            newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+        }
+    }
+
+    private fun Element.toSearchResult(): SearchResponse? {
+        val link = this.selectFirst("a[href*='/dizi/'], a[href*='/film/']") ?: return null
+        val href = fixUrlNull(link.attr("href")) ?: return null
+        val title = link.attr("title").ifEmpty {
+            this.selectFirst("h2, span.block a")?.text()?.trim() ?: return null
+        }
+
+        val posterUrl = fixUrlNull(this.selectFirst("img")?.let { img ->
+            img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                ?: img.attr("data-src").takeIf { it.isNotBlank() }
+        })
+
+        val type = when {
+            href.contains("/dizi/") -> TvType.TvSeries
+            href.contains("/film/") -> TvType.Movie
+            else -> return null
+        }
+
+        return newTvSeriesSearchResponse(title, href, type) {
+            this.posterUrl = posterUrl
+        }
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -219,40 +325,63 @@ class YabanciDizi : MainAPI() {
             } catch (e: Exception) { null }
         } else null
 
+        val tvType = if (tvSeriesData?.type?.contains("Movie", ignoreCase = true) == true) {
+            TvType.Movie
+        } else if (tvSeriesData?.type?.contains("TVSeries", ignoreCase = true) == true) {
+            TvType.TvSeries
+        } else if (url.contains("/film/")) {
+            TvType.Movie
+        } else {
+            TvType.TvSeries
+        }
+
         val title = tvSeriesData?.name
-            ?: document.selectFirst("h1")?.ownText()?.trim()
+            ?: document.selectFirst("h1.page-title")?.ownText()?.trim()
             ?: document.selectFirst("h1")?.text()?.trim()
             ?: return null
 
         val year = tvSeriesData?.let { data ->
             Regex("""\b(19|20)\d{2}\b""").find(data.name ?: "")?.value?.toIntOrNull()
                 ?: data.datePublished?.substringBefore("-")?.toIntOrNull()
-        } ?: document.selectFirst("h1 span")?.text()?.trim()?.removeSurrounding("(", ")")?.toIntOrNull()
+        } ?: document.selectFirst("h1.page-title span.light-title")?.text()?.trim()
+            ?.removeSurrounding("(", ")")?.toIntOrNull()
 
         val poster = fixUrlNull(
-            document.selectFirst("div.series-profile-image img")?.let { img ->
+            document.selectFirst("div.bg-cover-bg img")?.let { img ->
                 img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
-            }
+            } ?: document.selectFirst("a#series-profile-image-wrapper img")?.let { img ->
+                img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+            } ?: tvSeriesData?.image
         )
 
         val description = tvSeriesData?.description
             ?: document.selectFirst("meta[name='description']")?.attr("content")
 
         val tags = tvSeriesData?.genre?.filter { it != "/" && it.isNotBlank() }
-            ?: document.select("a[href*='/kategori/'], a[href*='/tur/']").mapNotNull { el ->
+            ?: document.select("a[href*='/tur/']").mapNotNull { el ->
                 el.text().trim().takeIf { it.isNotBlank() }
             }
 
         val actors = tvSeriesData?.actor?.mapNotNull { actorData ->
             val name = actorData.name?.trim() ?: return@mapNotNull null
             Actor(name, null)
-        } ?: document.select("div.series-profile-cast li a").mapNotNull { el ->
+        } ?: document.select("li.artist-photo a, div.series-profile-cast li a").mapNotNull { el ->
             val name = el.selectFirst("h5")?.text()?.trim() ?: return@mapNotNull null
             Actor(name, null)
         }
 
         val episodes = mutableListOf<Episode>()
         val seasons = tvSeriesData?.containsSeason
+
+        if (tvType == TvType.Movie) {
+            return newMovieLoadResponse(title, url, TvType.Movie, url) {
+                this.posterUrl = poster
+                this.plot = description
+                this.year = year
+                this.tags = tags
+                addActors(actors)
+            }
+        }
 
         if (seasons != null) {
             for (season in seasons) {
@@ -308,7 +437,7 @@ class YabanciDizi : MainAPI() {
         }
 
         if (episodes.isEmpty()) {
-            val epFromPage = document.select("div.series-watch-season-episode a[href*='/izle/']").mapNotNull { el ->
+            document.select("div.episode-container a[href*='/izle/']").mapNotNull { el ->
                 val epUrl = fixUrlNull(el.attr("href")) ?: return@mapNotNull null
                 val epTitle = el.selectFirst("h3")?.text()?.trim() ?: return@mapNotNull null
                 val epSmall = el.selectFirst("small")?.text()?.trim() ?: ""
@@ -323,8 +452,7 @@ class YabanciDizi : MainAPI() {
                     this.season = seasonNum
                     this.episode = episodeNum
                 }
-            }
-            episodes.addAll(epFromPage)
+            }.let { episodes.addAll(it) }
         }
 
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
@@ -345,23 +473,77 @@ class YabanciDizi : MainAPI() {
         bypassCloudflare()
         val document = app.get(data, interceptor = interceptor).document
 
-        val iframeSrc = document.selectFirst("div#tv-spoox2 iframe")?.attr("src") ?: run {
-            val altPlayer = document.selectFirst("div.card-video iframe")?.attr("src")
-            if (altPlayer != null) fixUrlNull(altPlayer) else null
-        } ?: return false
-
-        Log.d("YabanciDizi", "iframe: $iframeSrc")
-
-        loadExtractor(iframeSrc, mainUrl, subtitleCallback, callback)
-
-        document.select("div.series-watch-alternatives li a[href*='?player=']").forEach { playerLink ->
-            val playerUrl = fixUrlNull(playerLink.attr("href")) ?: return@forEach
-            val playerDoc = app.get(playerUrl, interceptor = interceptor).document
-            val altIframe = playerDoc.selectFirst("div#tv-spoox2 iframe")?.attr("src")
-                ?: playerDoc.selectFirst("div.card-video iframe")?.attr("src")
-            if (altIframe != null) {
-                loadExtractor(altIframe, mainUrl, subtitleCallback, callback)
+        val downloadLinks = document.select("a.item[href*='vidmoly']")
+        for (link in downloadLinks) {
+            val url = link.attr("href")
+            if (url.isNotBlank()) {
+                loadExtractor(url, mainUrl, subtitleCallback, callback)
             }
+        }
+
+        val playerData = document.selectFirst("div#not-loaded")
+        if (playerData != null) {
+            val whatwehave = playerData.attr("data-whatwehave")
+            val lang = playerData.attr("data-lang")
+            if (whatwehave.isNotBlank()) {
+                try {
+                    val resolveUrl = "${mainUrl}/bg/player"
+                    val response = app.post(
+                        resolveUrl,
+                        data = mapOf(
+                            "whatwehave" to whatwehave,
+                            "lang" to lang
+                        ),
+                        referer = data,
+                        interceptor = interceptor
+                    ).text
+
+                    val json = try {
+                        mapper.readValue<PlayerResponse>(response)
+                    } catch (e: Exception) { null }
+
+                    val link = json?.link
+                    if (link != null && link.isNotBlank()) {
+                        loadExtractor(link, mainUrl, subtitleCallback, callback)
+                    }
+                } catch (e: Exception) {
+                    Log.d("YabanciDizi", "Player resolve error: ${e.message}")
+                }
+            }
+        }
+
+        for (alt in document.select("div.item[data-link]")) {
+            val encodedLink = alt.attr("data-link")
+            if (encodedLink.isNotBlank()) {
+                val decoded = try {
+                    val bytes = android.util.Base64.decode(encodedLink, android.util.Base64.DEFAULT)
+                    if (bytes != null) String(bytes) else null
+                } catch (e: Exception) { null }
+                if (decoded != null) {
+                    loadExtractor(decoded, mainUrl, subtitleCallback, callback)
+                }
+            }
+        }
+
+        val iframeSrc = document.selectFirst("iframe")?.attr("src")
+        if (iframeSrc != null) {
+            loadExtractor(iframeSrc, mainUrl, subtitleCallback, callback)
+        }
+
+        val vidSrc = document.selectFirst("video source")?.attr("src")
+            ?: document.selectFirst("video")?.attr("src")
+        if (vidSrc != null) {
+            callback.invoke(
+                newExtractorLink(
+                    source = "YabanciDizi",
+                    name = "Video",
+                    url = vidSrc,
+                    type = INFER_TYPE
+                ) {
+                    quality = getQualityFromName(vidSrc)
+                    referer = mainUrl
+                }
+            )
         }
 
         return true
@@ -383,12 +565,18 @@ data class SearchResultData(
     @JsonProperty("html") val html: String? = null
 )
 
+data class PlayerResponse(
+    @JsonProperty("link") val link: String? = null,
+    @JsonProperty("status") val status: String? = null
+)
+
 data class JsonLdTVSeries(
     @JsonProperty("@type") val type: String? = null,
     @JsonProperty("name") val name: String? = null,
     @JsonProperty("description") val description: String? = null,
     @JsonProperty("datePublished") val datePublished: String? = null,
     @JsonProperty("genre") val genre: List<String>? = null,
+    @JsonProperty("image") val image: String? = null,
     @JsonProperty("actor") val actor: List<JsonLdActor>? = null,
     @JsonProperty("containsSeason") val containsSeason: List<JsonLdSeason>? = null
 )
