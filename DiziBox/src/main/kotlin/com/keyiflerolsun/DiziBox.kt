@@ -89,7 +89,7 @@ class DiziBox : MainAPI() {
         ).document
 
         if (request.name == "Popüler") {
-            val items = document.select("article.post-box-grid").mapNotNull { it.toMainPageResult() }
+            val items = document.select("article.post-box-grid").mapNotNull { it.toEpisodeResult() }
             if (items.isNotEmpty()) {
                 return newHomePageResponse(request.name, items)
             }
@@ -102,7 +102,7 @@ class DiziBox : MainAPI() {
                 ),
                 interceptor = interceptor
             ).document
-            val fallback = homeDoc.select("article.post-box-grid").mapNotNull { it.toMainPageResult() }
+            val fallback = homeDoc.select("article.post-box-grid").mapNotNull { it.toEpisodeResult() }
             return newHomePageResponse(request.name, fallback)
         }
 
@@ -125,6 +125,18 @@ private fun Element.toMainPageResult(): SearchResponse? {
         }
     )
 
+    return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+}
+
+private fun Element.toEpisodeResult(): SearchResponse? {
+    val titleEl = this.selectFirst("a.tv-title") ?: return null
+    val title = titleEl.text().trim().takeIf { it.isNotBlank() } ?: return null
+    val href = fixUrlNull(titleEl.attr("href")) ?: return null
+    val posterUrl = fixUrlNull(
+        this.selectFirst("img.small-thumbnail")?.let { img ->
+            img.attr("data-src").takeIf { it.isNotBlank() } ?: img.attr("src")
+        } ?: this.selectFirst("div.box-image.lazzy")?.attr("data-src")
+    )
     return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
 }
 
