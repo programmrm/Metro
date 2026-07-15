@@ -57,13 +57,14 @@ jobs:
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
           
-          # Hatalı eklentiler varsa atlayıp digerlerini derlemeye devam etmesi icin --continue eklendi
-          ./gradlew make makePluginsJson --continue || true
+          ./gradlew tasks --group=cloudstream
+          ./gradlew make makePluginsJson
           
-          # .cs3 dosyalarini klasor yapisini bozarak dogrudan ana dizine kopyalar
+          echo "=== Searching for .cs3 files ==="
+          find . -name "*.cs3" -ls 2>/dev/null || echo "No .cs3 files found"
+          
           find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
           
-          # Eger olustuysa plugins.json dosyasini kopyalar
           if [ -f "build/plugins.json" ]; then
             cp build/plugins.json $GITHUB_WORKSPACE/builds/
           fi
