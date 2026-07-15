@@ -21,14 +21,15 @@ class CloseLoad : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        val filmRef = referer ?: "$mainUrl/"
         val headers2 = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-            "Referer" to "$mainUrl/",
-            "Origin" to mainUrl
+            "Referer" to filmRef,
+            "Origin" to filmRef.trimEnd('/')
         )
 
         try {
-            val response = app.get(url, referer = mainUrl, headers = headers2)
+            val response = app.get(url, referer = filmRef, headers = headers2)
             val html = response.text 
 
             // 1. JS Deşifre Algoritmasını Dene
@@ -51,7 +52,7 @@ class CloseLoad : ExtractorApi() {
                     ) {
                         quality = Qualities.P1080.value
                         headers = mapOf(
-                            "Referer" to "$mainUrl/",
+                            "Referer" to filmRef,
                             "User-Agent" to headers2["User-Agent"]!!
                         )
                     }
