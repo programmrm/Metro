@@ -55,12 +55,12 @@ class Dizist : MainAPI() {
         if (request.name == "Yeni Eklenen Dizi Bölümleri") {
             val sections = mutableListOf<HomePageList>()
             val sectionTitles = listOf(
-                "lastEpisodes" to "Yazın En Fazla İzlenen Dizileri",
                 "lastSeriesEp" to "Yeni Eklenen Dizi Bölümleri",
                 "lastAsiaEp" to "Yeni Eklenen Asya Bölümleri",
                 "lastAsiaSeries" to "Yeni Eklenen Asya Dizileri",
                 "lastAnimeEp" to "Yeni Eklenen Anime Bölümleri",
-                "lastAnimeSeries" to "Yeni Eklenen Animeler"
+                "lastAnimeSeries" to "Yeni Eklenen Animeler",
+                "lastEpisodes" to "Yazın En Fazla İzlenen Dizileri"
             )
 
             for ((id, title) in sectionTitles) {
@@ -71,7 +71,6 @@ class Dizist : MainAPI() {
 
                 if (items.isNotEmpty()) {
                     sections.add(HomePageList(title, items))
-                    if (title == "Yazın En Fazla İzlenen Dizileri") break
                 }
             }
 
