@@ -73,19 +73,26 @@ private fun Element.toSearchResult(): SearchResponse? {
     val title = aTag.attr("data-title").takeIf { it.isNotBlank() } ?: return null
     val href = fixUrlNull(aTag.attr("href")) ?: return null
     val posterUrl = fixUrlNull(aTag.selectFirst("img")?.attr("src"))
+    val score = aTag.attr("data-score").takeIf { it.isNotBlank() }?.toDoubleOrNull()
 
-    Log.d("FLMM", "Film: $title, Href: $href, Poster: $posterUrl")
+    Log.d("FLMM", "Film: $title, Href: $href, Poster: $posterUrl, Score: $score")
 
     return newMovieSearchResponse(title, href, TvType.Movie) {
         this.posterUrl = posterUrl
+        this.score = score?.let { Score.from10(it) }
     }
 }
     private fun Element.toRecommendResult(): SearchResponse? {
-        val title     = this.select("a").last()?.text() ?: return null
-        val href      = fixUrlNull(this.select("a").last()?.attr("href")) ?: return null
-        val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+        val aTag     = selectFirst("a.item") ?: return null
+        val title    = aTag.attr("data-title").takeIf { it.isNotBlank() } ?: this.select("a").last()?.text() ?: return null
+        val href     = fixUrlNull(aTag.attr("href")) ?: return null
+        val posterUrl = fixUrlNull(selectFirst("img")?.attr("src"))
+        val score    = aTag.attr("data-score").takeIf { it.isNotBlank() }?.toDoubleOrNull()
 
-        return newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
+        return newMovieSearchResponse(title, href, TvType.Movie) {
+            this.posterUrl = posterUrl
+            this.score = score?.let { Score.from10(it) }
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
