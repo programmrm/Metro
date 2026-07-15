@@ -62,14 +62,14 @@ subprojects {
 
     android {
         namespace = "com.programmer"
-        compileSdk = 36
+        compileSdk = 35
 
         defaultConfig {
             minSdk = 21
         }
 
         lint {
-            targetSdk = 36
+            targetSdk = 35
         }
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_1_8
