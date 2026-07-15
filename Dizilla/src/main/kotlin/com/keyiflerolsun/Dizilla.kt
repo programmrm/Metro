@@ -200,11 +200,14 @@ result.add(newTvSeriesSearchResponse(title, fixUrl("/dizi/$cleanSlug"), TvType.T
                             item.get("brand_url")?.asText(),
                             item.get("square_url")?.asText(),
                             item.get("poster")?.asText(),
-                            item.get("image")?.asText()
+                            item.get("image")?.asText(),
+                            item.get("poster_path")?.asText(),
+                            item.get("object_poster_url")?.asText(),
+                            item.get("still_path")?.asText()
                         )
                         val rawPoster = posterCandidates.firstOrNull { 
-                            !it.isNullOrEmpty() && !it.contains("cdn.ampproject.org")
-                        } ?: posterCandidates.firstOrNull { !it.isNullOrEmpty() }
+                            !it.contains("cdn.ampproject.org")
+                        } ?: posterCandidates.firstOrNull()
                         this.posterUrl = when {
                             rawPoster.isNullOrEmpty() -> null
                             rawPoster.startsWith("http") -> rawPoster
