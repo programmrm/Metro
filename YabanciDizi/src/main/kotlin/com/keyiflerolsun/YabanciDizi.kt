@@ -27,13 +27,27 @@ class YabanciDizi : MainAPI() {
     private val cloudflareKiller by lazy { CloudflareKiller() }
     private val interceptor by lazy { CloudflareInterceptor(cloudflareKiller) }
 
+    private var cloudflareBypassed = false
+
+    private suspend fun bypassCloudflare() {
+        if (cloudflareBypassed) return
+        try {
+            app.get(mainUrl, interceptor = interceptor)
+            cloudflareBypassed = true
+        } catch (e: Exception) {
+            println("Cloudflare bypass error: ${e.message}")
+        }
+    }
+
     class CloudflareInterceptor(private val cloudflareKiller: CloudflareKiller): Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
             val request  = chain.request()
             val response = chain.proceed(request)
-            val doc      = Jsoup.parse(response.peekBody(10 * 1024).string())
+            val body     = response.peekBody(10 * 1024).string()
+            val doc      = Jsoup.parse(body)
+            val title    = doc.title()
 
-            if (response.code == 503 || doc.selectFirst("meta[name='cloudflare']") != null) {
+            if (response.code in listOf(403, 503) || title.contains("Cloudflare") || title.contains("Attention Required") || doc.selectFirst("meta[name='cloudflare']") != null) {
                 return cloudflareKiller.intercept(chain)
             }
             return response
@@ -49,6 +63,7 @@ class YabanciDizi : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        bypassCloudflare()
         val url = if (page <= 1) request.data else "${request.data}?page=$page"
         val document = app.get(url, interceptor = interceptor).document
 
@@ -67,6 +82,13 @@ class YabanciDizi : MainAPI() {
                 val items = document.select("div#result_$id > div.poster-mb-bx")
                     .ifEmpty { document.select("div.area:has(div#result_$id) div.poster-mb-bx") }
                     .ifEmpty { document.select("div.poster-mb-bx") }
+                    .ifEmpty { document.select("div[class*='poster'] a[href*='/dizi/']").mapNotNull { it.parent() } }
+                    .ifEmpty { document.select("a[href*='/dizi/'] > img, a[href*='/dizi/'] > picture").mapNotNull { it.parent() } }
+                    .ifEmpty {
+                        document.select("a[href*='/dizi/']").mapNotNull { link ->
+                            if (link.selectFirst("img") != null) link else null
+                        }
+                    }
                     .mapNotNull { it.toSearchResult() }
 
                 if (items.isNotEmpty()) {
@@ -76,6 +98,17 @@ class YabanciDizi : MainAPI() {
 
             if (sections.isEmpty()) {
                 val home = document.select("div.poster-mb-bx").mapNotNull { it.toSearchResult() }
+                if (home.isEmpty()) {
+                    val items = document.select("a[href*='/dizi/']").mapNotNull { link ->
+                        if (link.selectFirst("img") == null) return@mapNotNull null
+                        val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+                        val title = link.attr("title").ifEmpty { link.text().trim() }
+                        if (title.isBlank()) return@mapNotNull null
+                        val posterUrl = fixUrlNull(link.selectFirst("img")?.attr("src") ?: link.selectFirst("img")?.attr("data-src"))
+                        newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+                    }
+                    return newHomePageResponse("Popüler", items)
+                }
                 return newHomePageResponse("Popüler", home)
             }
 
@@ -83,6 +116,17 @@ class YabanciDizi : MainAPI() {
         }
 
         val home = document.select("div.poster-mb-bx").mapNotNull { it.toSearchResult() }
+        if (home.isEmpty()) {
+            val items = document.select("a[href*='/dizi/']").mapNotNull { link ->
+                if (link.selectFirst("img") == null) return@mapNotNull null
+                val href = fixUrlNull(link.attr("href")) ?: return@mapNotNull null
+                val title = link.attr("title").ifEmpty { link.text().trim() }
+                if (title.isBlank()) return@mapNotNull null
+                val posterUrl = fixUrlNull(link.selectFirst("img")?.attr("src") ?: link.selectFirst("img")?.attr("data-src"))
+                newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+            }
+            return newHomePageResponse(request.name, items)
+        }
         return newHomePageResponse(request.name, home)
     }
 
@@ -108,6 +152,7 @@ class YabanciDizi : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
+        bypassCloudflare()
         val homeDoc = app.get(mainUrl, interceptor = interceptor).document
 
         val cKey = homeDoc.selectFirst("input[name='cKey']")?.attr("value")
@@ -164,6 +209,7 @@ class YabanciDizi : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
+        bypassCloudflare()
         val document = app.get(url, interceptor = interceptor).document
 
         val jsonLd = document.selectFirst("script[type='application/ld+json']")?.data()
@@ -296,6 +342,7 @@ class YabanciDizi : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        bypassCloudflare()
         val document = app.get(data, interceptor = interceptor).document
 
         val iframeSrc = document.selectFirst("div#tv-spoox2 iframe")?.attr("src") ?: run {
