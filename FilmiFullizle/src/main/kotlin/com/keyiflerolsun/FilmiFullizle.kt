@@ -4,24 +4,50 @@ package com.keyiflerolsun
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
+import okhttp3.Interceptor
+import okhttp3.Response
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class FilmiFullizle : MainAPI() {
-    override var mainUrl              = "https://www.filmifullizle.life"
+    override var mainUrl              = "http://filmifullizle.life"
     override var name                 = "FilmiFullizle"
     override val hasMainPage          = true
     override var lang                 = "tr"
     override val hasQuickSearch       = false
     override val supportedTypes       = setOf(TvType.Movie)
 
+    private val cloudflareKiller by lazy { CloudflareKiller() }
+    private val interceptor by lazy { CloudflareInterceptor(cloudflareKiller) }
+
+    private val commonHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer" to mainUrl
+    )
+
+    class CloudflareInterceptor(private val cloudflareKiller: CloudflareKiller) : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val request = chain.request()
+            val response = chain.proceed(request)
+            val doc = Jsoup.parse(response.peekBody(1024 * 1024).string())
+            if (doc.html().contains("verifying") || doc.selectFirst("meta[name='cloudflare']") != null) {
+                return cloudflareKiller.intercept(chain)
+            }
+            return response
+        }
+    }
+
     override val mainPage = mainPageOf(
         mainUrl to "Ana Sayfa"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("${request.data}${if (page <= 1) "" else "?page=$page"}").document
+        val document = app.get("${request.data}${if (page <= 1) "" else "?page=$page"}", interceptor = interceptor, headers = commonHeaders).document
 
-        val home = document.select("div.film, article, li.movie, .poster-mb-bx, .item").mapNotNull { it.toSearchResult() }
+        val home = document.select("div.film, article, li.movie, .poster-mb-bx, .item, div.poster-mb-bx").mapNotNull { it.toSearchResult() }
 
         return newHomePageResponse(request.name, home)
     }
@@ -41,14 +67,14 @@ class FilmiFullizle : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = app.get("${mainUrl}/?s=$query").document
-        return document.select("div.film, article, li.movie, .poster-mb-bx, .item").mapNotNull { it.toSearchResult() }
+        val document = app.get("${mainUrl}/?s=$query", interceptor = interceptor, headers = commonHeaders).document
+        return document.select("div.film, article, li.movie, .poster-mb-bx, .item, div.poster-mb-bx").mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url).document
+        val document = app.get(url, interceptor = interceptor, headers = commonHeaders).document
 
         val title = document.selectFirst("h1")?.text()?.trim() ?: return null
         val poster = fixUrlNull(
@@ -75,7 +101,7 @@ class FilmiFullizle : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
+        val document = app.get(data, interceptor = interceptor, headers = commonHeaders).document
 
         val iframe = document.selectFirst("iframe[src]")?.attr("src")
             ?: document.selectFirst("div.video iframe, .player iframe, #player iframe")?.attr("src")
