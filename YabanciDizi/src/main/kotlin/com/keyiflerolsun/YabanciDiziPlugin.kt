@@ -5,8 +5,8 @@ import com.lagradost.cloudstream3.plugins.Plugin
 import android.content.Context
 
 @CloudstreamPlugin
-class FilmiFullizlePlugin: Plugin() {
+class YabanciDiziPlugin: Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(FilmiFullizle())
+        registerMainAPI(YabanciDizi())
     }
 }
