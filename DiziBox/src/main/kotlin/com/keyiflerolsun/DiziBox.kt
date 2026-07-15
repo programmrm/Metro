@@ -47,6 +47,7 @@ class DiziBox : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
+        "${mainUrl}/tum-bolumler/?tip=populer" to "Popüler",
         "${mainUrl}/ulke/turkiye"              to "Yerli",
         "${mainUrl}/dizi-arsivi/page/SAYFA/"   to "Dizi Arşivi",
         "${mainUrl}/tur/aile/page/SAYFA/"      to "Aile",
@@ -86,6 +87,25 @@ class DiziBox : MainAPI() {
             ),
             interceptor = interceptor, cacheTime = 60
         ).document
+
+        if (request.name == "Popüler") {
+            val items = document.select("article.post-box-grid").mapNotNull { it.toMainPageResult() }
+            if (items.isNotEmpty()) {
+                return newHomePageResponse(request.name, items)
+            }
+            val homeDoc = app.get(
+                mainUrl,
+                cookies     = mapOf(
+                    "LockUser"      to "true",
+                    "isTrustedUser" to "true",
+                    "dbxu"          to "1743289650198"
+                ),
+                interceptor = interceptor
+            ).document
+            val fallback = homeDoc.select("article.post-box-grid").mapNotNull { it.toMainPageResult() }
+            return newHomePageResponse(request.name, fallback)
+        }
+
         if (request.name == "Dizi Arşivi") {
             val home = document.select("article.detailed-article").mapNotNull { it.toMainPageResult() }
             return newHomePageResponse(request.name, home)
