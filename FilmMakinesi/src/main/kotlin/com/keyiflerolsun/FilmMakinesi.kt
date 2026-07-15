@@ -118,9 +118,15 @@ private fun Element.toSearchResult(): SearchResponse? {
             Actor(it.trim())
         }
 
-        val trailer = document.selectFirst("div.left a.trailer-button")?.attr("data-video_url")?.substringAfter("embed/", "")?.let { 
-    if (it.isNotEmpty()) "https://www.youtube.com/watch?v=$it" else null 
-}
+val trailer = document.selectFirst("div.left a.trailer-button")?.attr("data-video_url")?.substringAfter("embed/", "")?.let {
+            if (it.isNotEmpty()) "https://www.youtube.com/watch?v=$it" else null
+        }
+
+        // Rating/Puan çekme
+        val rating = document.selectFirst(".rating-value, .imdb-rating, .film-rating, [itemprop=ratingValue], .puan, .rating, .vote, .score")?.text()?.trim()
+            ?.let { it.replace(",", ".").toDoubleOrNull() }
+            ?: document.selectFirst("meta[itemprop=ratingValue]")?.attr("content")?.toDoubleOrNull()
+            ?: document.selectFirst("meta[name=twitter:data1]")?.attr("content")?.toDoubleOrNull()
 
         return newMovieLoadResponse(title, url, TvType.Movie, url) {
             this.posterUrl       = poster
@@ -129,6 +135,7 @@ private fun Element.toSearchResult(): SearchResponse? {
             this.tags            = tags
             this.duration        = duration
             this.recommendations = recommendations
+            this.rating          = rating
             addActors(actors)
             addTrailer(trailer)
         }
