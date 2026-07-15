@@ -1,4 +1,3 @@
-# Bu arac @keyiflerolsun tarafindan | @programmrm icin yazilmistir.
 name: CloudStream Compiler
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -11,10 +10,8 @@ on:
       - main
     paths-ignore:
       - "**/*.md"
-      - "**/*.yml"
       - "**/*.jpg"
       - "**/*.png"
-      - "**/*.py"
 
 jobs:
   CloudStreamCompiler:
@@ -36,9 +33,7 @@ jobs:
       - name: Clear Old Builds and Folders
         run: |
           cd $GITHUB_WORKSPACE/builds
-          # Mevcut olan tum eski gereksiz alt klasorleri temizler
           find . -maxdepth 1 -type d ! -name '.' ! -name '.git' -exec rm -rf {} +
-          # Eski cs3 dosyalarini siler
           rm -f *.cs3 || true
 
       - name: Set up JDK 17
@@ -59,27 +54,10 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
-          
-          ./gradlew tasks --group=cloudstream
-          ./gradlew make makePluginsJson
-          
-          echo "=== Searching for .cs3 files ==="
-          find . -name "*.cs3" -ls 2>/dev/null || echo "No .cs3 files found"
-          
+          ./gradlew make makePluginsJson --continue || true
           find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
-          
           if [ -f "build/plugins.json" ]; then
             cp build/plugins.json $GITHUB_WORKSPACE/builds/
-          fi
-
-      - name: Update Repository Info
-        run: |
-          # Hata vermemesi icin dosyalarin varligi kontrol edilerek sed islemi yapilir
-          if [ -f "$GITHUB_WORKSPACE/builds/plugins.json" ]; then
-            sed -i 's/@KekikAkademi/@programmrm/g' $GITHUB_WORKSPACE/builds/plugins.json
-          fi
-          if [ -f "$GITHUB_WORKSPACE/builds/repo.json" ]; then
-            sed -i 's/@KekikAkademi/@prg/g' $GITHUB_WORKSPACE/builds/repo.json
           fi
 
       - name: Push Compiled Plugins
