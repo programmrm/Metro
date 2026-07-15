@@ -61,7 +61,7 @@ subprojects {
     }
 
     android {
-        namespace = "com.keyiflerolsun"
+        namespace = "com.programmer"
         compileSdk = 36
 
         defaultConfig {
