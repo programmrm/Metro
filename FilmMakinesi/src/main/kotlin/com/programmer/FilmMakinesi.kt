@@ -135,7 +135,7 @@ val trailer = document.selectFirst("div.left a.trailer-button")?.attr("data-vide
             this.tags            = tags
             this.duration        = duration
             this.recommendations = recommendations
-            this.rating          = rating
+            this.score           = rating?.let { Score.from10(it) }
             addActors(actors)
             addTrailer(trailer)
         }
