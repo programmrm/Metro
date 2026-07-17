@@ -65,9 +65,11 @@ class Dizilla : MainAPI() {
     private fun pickPoster(item: JsonNode): String? {
         for (key in listOf("poster_url", "face_url", "back_url", "brand_url", "logo_url")) {
             val url = item.get(key)?.asText() ?: continue
-            if (!url.contains("file.macellan.online")) return url
+            if (url.contains("file.macellan.online")) continue
+            if (url.endsWith("/")) continue
+            return url
         }
-        return item.get("face_url")?.asText() ?: item.get("poster_url")?.asText()
+        return null
     }
 
     private fun extractItems(data: JsonNode, catKey: String): List<SearchResponse> {
