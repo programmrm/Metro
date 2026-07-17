@@ -3,16 +3,9 @@ version = 91
 cloudstream {
     authors     = listOf("programmer", "muratcesmecioglu")
     language    = "tr"
-    description = "en yeni dizileri güvenli ve hızlı şekilde sunar."
+    description = "DiziPal — en yeni dizileri güvenli ve hızlı şekilde sunar."
 
-    /**
-     * Status int as the following:
-     * 0: Down
-     * 1: Ok
-     * 2: Slow
-     * 3: Beta only
-    **/
-    status  = 1 // will be 3 if unspecified
+    status  = 1
     tvTypes = listOf("TvSeries", "Movie")
     iconUrl = "https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%"
 }
