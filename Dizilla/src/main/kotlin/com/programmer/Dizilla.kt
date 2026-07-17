@@ -208,48 +208,52 @@ class Dizilla : MainAPI() {
             val decrypted = decryptAES(secureData) ?: return null
             val data = mapper.readTree(decrypted)
 
-            val title = data.get("name")?.asText() ?: data.get("title")?.asText() ?: doc.selectFirst("h1")?.text() ?: return null
+            val contentItem = data.get("contentItem")
 
-            val posterPath = data.get("poster_path")?.asText() ?: data.get("poster")?.asText()
-            val poster = when {
-                posterPath.isNullOrEmpty() -> fixUrlNull(doc.selectFirst("img[alt*='$title']")?.attr("src"))
-                posterPath.startsWith("http") -> posterPath
-                else -> "$mainUrl$posterPath"
-            }
+            val title = contentItem?.get("original_title")?.asText()
+                ?: contentItem?.get("culture_title")?.asText()
+                ?: doc.selectFirst("h1")?.text()
+                ?: return null
 
-            val description = data.get("description")?.asText() ?: data.get("overview")?.asText() ?: doc.selectFirst("p, div.text-sm, div.mt-2")?.text()?.trim()
+            val poster = contentItem?.let { pickPoster(it) }
+                ?: fixUrlNull(doc.selectFirst("img[alt*='$title']")?.attr("src"))
 
-            val year = data.get("year")?.asInt() ?: data.get("release_date")?.asText()?.takeLast(4)?.toIntOrNull()
+            val description = contentItem?.get("description")?.asText()
+                ?: doc.selectFirst("p, div.text-sm, div.mt-2")?.text()?.trim()
+
+            val year = contentItem?.get("release_year")?.asInt()
+                ?: contentItem?.get("year")?.asInt()
 
             val tags = mutableListOf<String>()
-            val genresNode = data.get("genres")
+            val genresNode = contentItem?.get("categories")
             if (genresNode != null && genresNode.isArray) {
                 for (i in 0 until genresNode.size()) tags.add(genresNode.get(i).asText())
             }
 
-            val scoreValue = data.get("vote_average")?.asDouble() ?: data.get("score")?.asDouble()
+            val scoreValue = contentItem?.get("vote_average")?.asDouble()
+                ?: contentItem?.get("score")?.asDouble()
             val score = scoreValue?.let { Score.from10(it) }
 
             val episodes = mutableListOf<Episode>()
-            val seasonsNode = data.get("seasons") ?: data.get("sezonlar")
-            if (seasonsNode != null && seasonsNode.isArray) {
-                for (s in 0 until seasonsNode.size()) {
-                    val seasonNode = seasonsNode.get(s)
-                    val season = seasonNode.get("season_number")?.asInt() ?: seasonNode.get("season")?.asInt() ?: 1
-                    val episodesNode = seasonNode.get("episodes") ?: seasonNode.get("bolumler")
-                    if (episodesNode != null && episodesNode.isArray) {
-                        for (e in 0 until episodesNode.size()) {
-                            val epNode = episodesNode.get(e)
+            val seasonResult = data.get("RelatedResults")?.get("getSerieSeasonAndEpisodes")?.get("result")
+            if (seasonResult != null && seasonResult.isArray) {
+                for (s in 0 until seasonResult.size()) {
+                    val seasonNode = seasonResult.get(s)
+                    val season = seasonNode.get("season_no")?.asInt() ?: 1
+                    val epList = seasonNode.get("episodes")
+                    if (epList != null && epList.isArray) {
+                        for (e in 0 until epList.size()) {
+                            val epNode = epList.get(e)
                             val epName = epNode.get("name")?.asText() ?: epNode.get("title")?.asText() ?: ""
-                            val epSlug = epNode.get("slug")?.asText() ?: epNode.get("url")?.asText() ?: epNode.get("episode_used_slug")?.asText()
-                            val epHref = when {
-                                epSlug.isNullOrEmpty() -> null
-                                epSlug.startsWith("http") -> epSlug
-                                epSlug.startsWith("/") -> "$mainUrl$epSlug"
-                                else -> "$mainUrl/$epSlug"
-                            } ?: continue
-                            val epEpisode = epNode.get("episode_number")?.asInt() ?: epNode.get("episode")?.asInt()
-                            val epPoster = epNode.get("still_path")?.asText() ?: epNode.get("poster")?.asText()
+                            val epSlug = epNode.get("used_slug")?.asText()
+                                ?: epNode.get("slug")?.asText()
+                                ?: epNode.get("url")?.asText()
+                                ?: continue
+                            val epHref = "$mainUrl/$epSlug"
+                            val epEpisode = epNode.get("episode_no")?.asInt()
+                                ?: epNode.get("episode_number")?.asInt()
+                            val epPoster = epNode.get("still_path")?.asText()
+                                ?: epNode.get("poster")?.asText()
 
                             episodes.add(newEpisode(epHref) {
                                 this.name = epName
