@@ -315,11 +315,14 @@ class Dizilla : MainAPI() {
             val sourceData = mapper.readTree(decrypted)
 
             val sourceContent = sourceData.get("source_content")?.asText()
-                ?: sourceData.get("RelatedResults")?.get("getEpisodeSources")?.get("result")?.get(0)?.get("source_content")?.asText()
+                ?: sourceData.get("RelatedResults")?.get("getEpisodeSources")?.get("result")
+                    ?.mapNotNull { it.get("source_content")?.asText() }
+                    ?.firstOrNull()
                 ?: return false
 
             val cleanedSource = sourceContent.replace("\\", "")
-            val iframe = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(cleanedSource)?.groupValues?.get(1) ?: return false
+            val rawIframe = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(cleanedSource)?.groupValues?.get(1) ?: return false
+            val iframe = if (rawIframe.startsWith("//")) "https:$rawIframe" else rawIframe
 
             Log.d("Dizilla", "iframe: $iframe")
             loadExtractor(iframe, "${mainUrl}/", subtitleCallback, callback)
