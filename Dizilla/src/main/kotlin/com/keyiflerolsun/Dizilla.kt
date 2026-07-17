@@ -62,6 +62,14 @@ class Dizilla : MainAPI() {
         }
     }
 
+    private fun pickPoster(item: JsonNode): String? {
+        for (key in listOf("poster_url", "face_url", "back_url", "brand_url", "logo_url")) {
+            val url = item.get(key)?.asText() ?: continue
+            if (!url.contains("file.macellan.online")) return url
+        }
+        return item.get("face_url")?.asText() ?: item.get("poster_url")?.asText()
+    }
+
     private fun extractItems(data: JsonNode, catKey: String): List<SearchResponse> {
         val rawNode = data.get(catKey) ?: return emptyList()
         val arr = if (rawNode.isArray) rawNode else rawNode.get("items") ?: return emptyList()
@@ -76,7 +84,7 @@ class Dizilla : MainAPI() {
                     "$mainUrl/$slug",
                     TvType.TvSeries
                 ) {
-                    this.posterUrl = item.get("face_url")?.asText() ?: item.get("poster_url")?.asText()
+                    this.posterUrl = pickPoster(item)
                 }
             )
         }
