@@ -7,7 +7,11 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
+import okhttp3.Interceptor
+import okhttp3.Response
+import org.jsoup.Jsoup
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -21,8 +25,23 @@ class Dizilla : MainAPI() {
     override val supportedTypes = setOf(TvType.TvSeries)
 
     override var sequentialMainPage = true
-    override var sequentialMainPageDelay = 0L
-    override var sequentialMainPageScrollDelay = 0L
+    override var sequentialMainPageDelay = 150L
+    override var sequentialMainPageScrollDelay = 150L
+
+    private val cloudflareKiller by lazy { CloudflareKiller() }
+    private val interceptor by lazy { CloudflareInterceptor(cloudflareKiller) }
+
+    class CloudflareInterceptor(private val cloudflareKiller: CloudflareKiller) : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val request = chain.request()
+            val response = chain.proceed(request)
+            val doc = Jsoup.parse(response.peekBody(1024 * 1024).string())
+            if (doc.html().contains("Just a moment")) {
+                return cloudflareKiller.intercept(chain)
+            }
+            return response
+        }
+    }
 
     private val commonHeaders = mapOf(
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -41,7 +60,7 @@ class Dizilla : MainAPI() {
 
     private suspend fun getSecureData(): String? {
         return try {
-            val doc = app.get(mainUrl, headers = commonHeaders, cookies = apiCookies).document
+            val doc = app.get(mainUrl, interceptor = interceptor, headers = commonHeaders, cookies = apiCookies).document
             val scriptData = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
             mapper.readTree(scriptData).get("props")?.get("pageProps")?.get("secureData")?.asText()
         } catch (e: Exception) {
@@ -127,6 +146,7 @@ class Dizilla : MainAPI() {
         return try {
             val response = app.get(
                 "${mainUrl}/api/bg/findSeries?queryStr=$query&currentPageCount=50",
+                interceptor = interceptor,
                 headers = commonHeaders,
                 cookies = apiCookies
             )
@@ -201,7 +221,7 @@ class Dizilla : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         return try {
-            val doc = app.get(url, headers = commonHeaders, cookies = apiCookies).document
+            val doc = app.get(url, interceptor = interceptor, headers = commonHeaders, cookies = apiCookies).document
             val scriptData = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
             val pageProps = mapper.readTree(scriptData).get("props")?.get("pageProps") ?: return null
             val secureData = pageProps.get("secureData")?.asText() ?: return null
@@ -287,7 +307,7 @@ class Dizilla : MainAPI() {
     ): Boolean {
         return try {
             Log.d("Dizilla", "loadLinks: $data")
-            val doc = app.get(data, headers = commonHeaders, cookies = apiCookies).document
+            val doc = app.get(data, interceptor = interceptor, headers = commonHeaders, cookies = apiCookies).document
             val script = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return false
             val pageProps = mapper.readTree(script).get("props")?.get("pageProps") ?: return false
             val secureData = pageProps.get("secureData")?.asText() ?: return false
