@@ -1,6 +1,6 @@
-// ! Bu araç @keyiflerolsun tarafından | @KekikAkademi için yazılmıştır.
+// ! Bu araç @programmer tarafından.
 
-package com.keyiflerolsun
+package com.programmer
 
 import android.util.Log
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper

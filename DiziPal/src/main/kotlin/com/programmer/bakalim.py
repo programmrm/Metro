@@ -1,4 +1,4 @@
-# ! Bu araç @keyiflerolsun tarafından | @KekikAkademi için yazılmıştır.
+# ! Bu araç @programmer tarafından.
 
 from Kekik.cli    import konsol
 from cloudscraper import CloudScraper
