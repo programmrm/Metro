@@ -86,50 +86,29 @@ class CloseLoad : ExtractorApi() {
             val dcFuncEnd = scriptContent.indexOf("function d1x", dcFuncStart).takeIf { it != -1 } ?: scriptContent.length
             val funcBody = if (dcFuncStart != -1) scriptContent.substring(dcFuncStart, dcFuncEnd) else scriptContent
 
-            // Tüm ROT shift değerlerini replace içinden sırayla çıkar: (o - base + N) % 26
-            val rotShifts = """\(o\s*-\s*base\s*\+\s*(\d+)\)""".toRegex().findAll(funcBody).map {
-                it.groupValues[1].toIntOrNull() ?: 4
-            }.toList()
-
-            // Operasyon sırası: replace ve atob pozisyonlarını bul, sırala
-            data class Op(val pos: Int, val isAtob: Boolean)
+            data class Op(val pos: Int, val type: String)
             val ops = mutableListOf<Op>()
-            for (m in """\.replace\(""".toRegex().findAll(funcBody)) {
-                ops.add(Op(m.range.first, false))
-            }
             for (m in """atob\(""".toRegex().findAll(funcBody)) {
-                ops.add(Op(m.range.first, true))
+                ops.add(Op(m.range.first, "atob"))
+            }
+            val reverseIdx = funcBody.indexOf("reverse")
+            if (reverseIdx != -1) {
+                ops.add(Op(reverseIdx, "reverse"))
             }
             ops.sortBy { it.pos }
 
             var result = parts.joinToString("")
-            var rotIdx = 0
 
             for (op in ops) {
-                if (op.isAtob) {
-                    var padded = result
-                    while (padded.length % 4 != 0) padded += "="
-                    result = String(Base64.decode(padded, Base64.NO_WRAP), Charsets.ISO_8859_1)
-                } else {
-                    val shift = if (rotIdx < rotShifts.size) rotShifts[rotIdx] else 4
-                    rotIdx++
-                    val sb = StringBuilder()
-                    for (c in result) {
-                        if (c in 'a'..'z') {
-                            var shifted = c.code + shift
-                            while (shifted > 'z'.code) shifted -= 26
-                            while (shifted < 'a'.code) shifted += 26
-                            sb.append(shifted.toChar())
-                        } else if (c in 'A'..'Z') {
-                            var shifted = c.code + shift
-                            while (shifted > 'Z'.code) shifted -= 26
-                            while (shifted < 'A'.code) shifted += 26
-                            sb.append(shifted.toChar())
-                        } else {
-                            sb.append(c)
-                        }
+                when (op.type) {
+                    "atob" -> {
+                        var padded = result
+                        while (padded.length % 4 != 0) padded += "="
+                        result = String(Base64.decode(padded, Base64.NO_WRAP), Charsets.ISO_8859_1)
                     }
-                    result = sb.toString()
+                    "reverse" -> {
+                        result = result.reversed()
+                    }
                 }
             }
 
