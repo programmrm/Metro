@@ -21,8 +21,8 @@ class Dizilla : MainAPI() {
     override val supportedTypes = setOf(TvType.TvSeries)
 
     override var sequentialMainPage = true
-    override var sequentialMainPageDelay = 150L
-    override var sequentialMainPageScrollDelay = 150L
+    override var sequentialMainPageDelay = 0L
+    override var sequentialMainPageScrollDelay = 0L
 
     private val commonHeaders = mapOf(
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
