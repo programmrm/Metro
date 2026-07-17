@@ -35,9 +35,9 @@ class CloseLoad : ExtractorApi() {
             // 1. JS Deşifre Algoritmasını Dene
             var realUrl = decryptNative(html)
 
-            // 2. Fallback Mekanizması: Eğer JS şifre çözücü başarısız olursa JSON-LD bloğundaki şifresiz contentUrl'i ara
-            if (realUrl.isNullOrBlank()) {
-                Log.w("Kekik_${this.name}", "Native deşifre başarısız, Fallback JSON-LD aranıyor...")
+            // 2. Fallback: Eğer JS çözümü http URL vermezse JSON-LD contentUrl'i dene
+            if (realUrl.isNullOrBlank() || !realUrl.startsWith("http")) {
+                Log.w("Kekik_${this.name}", "Native deşifre başarısız veya geçersiz, Fallback JSON-LD aranıyor...")
                 val ldJsonMatch = """"contentUrl"\s*:\s*"([^"]+)"""".toRegex().find(html)
                 realUrl = ldJsonMatch?.groupValues?.get(1)?.replace("\\/", "/")
             }
