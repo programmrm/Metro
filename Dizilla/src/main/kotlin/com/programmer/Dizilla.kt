@@ -92,15 +92,27 @@ class Dizilla : MainAPI() {
 
     private fun extractItems(data: JsonNode, catKey: String): List<SearchResponse> {
         val rawNode = data.get(catKey) ?: return emptyList()
-        val arr = if (rawNode.isArray) rawNode else rawNode.get("items") ?: return emptyList()
+        val arr = when {
+            rawNode.isArray -> rawNode
+            rawNode.has("items") -> rawNode.get("items")
+            rawNode.has("result") -> rawNode.get("result")
+            else -> return emptyList()
+        }
+        if (!arr.isArray) return emptyList()
 
         val items = mutableListOf<SearchResponse>()
         for (i in 0 until arr.size()) {
             val item = arr.get(i) ?: continue
-            val slug = item.get("used_slug")?.asText() ?: continue
+            val slug = item.get("used_slug")?.asText()
+                ?: item.get("slug")?.asText()
+                ?: continue
             items.add(
                 newTvSeriesSearchResponse(
-                    item.get("original_title")?.asText() ?: item.get("culture_title")?.asText() ?: continue,
+                    item.get("original_title")?.asText()
+                        ?: item.get("culture_title")?.asText()
+                        ?: item.get("title")?.asText()
+                        ?: item.get("name")?.asText()
+                        ?: continue,
                     "$mainUrl/$slug",
                     TvType.TvSeries
                 ) {
