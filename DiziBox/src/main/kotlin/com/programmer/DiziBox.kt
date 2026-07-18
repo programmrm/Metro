@@ -22,7 +22,7 @@ class DiziBox : MainAPI() {
     override var sequentialMainPageDelay       = 50L
     override var sequentialMainPageScrollDelay = 50L
 
-    private fun req(url: String, ref: String? = null) = app.get(
+    private suspend fun req(url: String, ref: String? = null) = app.get(
         url,
         referer = ref,
         cookies = mapOf(
@@ -145,7 +145,8 @@ private fun Element.toMainPageResult(): SearchResponse? {
                 .replace("\\u00fc", "ü").replace("\\u00e7", "ç")
             if (file !in subUrls) {
                 subUrls.add(file)
-                subtitleCallback.invoke(newSubtitleFile(label, fixUrl(file)))
+                @Suppress("DEPRECATION")
+                subtitleCallback.invoke(SubtitleFile(label, fixUrl(file)))
             }
         }
         Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(source)?.groupValues?.getOrNull(1)?.let { tracks ->
@@ -154,7 +155,8 @@ private fun Element.toMainPageResult(): SearchResponse? {
                 val label = it.groupValues[2]
                 if (file !in subUrls) {
                     subUrls.add(file)
-                    subtitleCallback.invoke(newSubtitleFile(label, fixUrl(file)))
+                    @Suppress("DEPRECATION")
+                    subtitleCallback.invoke(SubtitleFile(label, fixUrl(file)))
                 }
             }
         }
