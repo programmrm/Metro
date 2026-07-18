@@ -15,23 +15,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: "Check out src repository"
+      - name: Checkout src
         uses: actions/checkout@v6
         with:
-          path: "src"
+          path: src
 
-      - name: "Check out build repository"
+      - name: Checkout builds
         uses: actions/checkout@v6
         with:
-          ref: "builds"
-          path: "builds"
+          ref: builds
+          path: builds
 
-      - name: Clear Old Builds and Folders
-        run: |
-          cd $GITHUB_WORKSPACE/builds
-          rm -rf *.cs3 *.json *.yml README.md 2>/dev/null || true
+      - name: Clean builds
+        run: rm -rf $GITHUB_WORKSPACE/builds/*
 
-      - name: Set up JDK 17
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -42,7 +40,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Build Plugins
+      - name: Build
         run: |
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
@@ -50,70 +48,9 @@ jobs:
           find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
 
       - name: Generate plugins.json
-        run: |
-          cd $GITHUB_WORKSPACE/builds
-          python3 -c 'import hashlib, json, os
-          plugins = [
-              {
-                  "name": "DiziBox", "internalName": "DiziBox", "version": 23,
-                  "description": "DiziBox platformu.",
-                  "iconUrl": "https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%",
-                  "tvTypes": ["TvSeries"], "language": "tr",
-                  "authors": ["programmer"], "status": 1
-              },
-              {
-                  "name": "Dizilla", "internalName": "Dizilla", "version": 97,
-                  "description": "Dizilla platformu.",
-                  "iconUrl": "https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%",
-                  "tvTypes": ["TvSeries"], "language": "tr",
-                  "authors": ["programmer"], "status": 1
-              },
-              {
-                  "name": "DiziPal", "internalName": "DiziPal", "version": 91,
-                  "description": "DiziPal platformu.",
-                  "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%",
-                  "tvTypes": ["TvSeries", "Movie"], "language": "tr",
-                  "authors": ["programmer", "muratcesmecioglu"], "status": 1
-              },
-              {
-                  "name": "DiziPalOriginal", "internalName": "DiziPalOriginal", "version": 68,
-                  "description": "DiziPalOriginal platformu.",
-                  "iconUrl": "https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%",
-                  "tvTypes": ["TvSeries", "Movie"], "language": "tr",
-                  "authors": ["programmer", "muratcesmecioglu"], "status": 1
-              }
-          ]
-          result = []
-          for p in plugins:
-              cs3 = p["internalName"] + ".cs3"
-              if not os.path.exists(cs3):
-                  print("UYARI: " + cs3 + " bulunamadi, atlaniyor")
-                  continue
-              with open(cs3, "rb") as f:
-                  h = hashlib.sha256(f.read()).hexdigest()
-              size = os.path.getsize(cs3)
-              entry = {
-                  "url": "https://raw.githubusercontent.com/programmrm/Metro/builds/" + cs3,
-                  "status": p["status"],
-                  "version": p["version"],
-                  "name": p["name"],
-                  "internalName": p["internalName"],
-                  "authors": p["authors"],
-                  "description": p["description"],
-                  "fileSize": size,
-                  "repositoryUrl": "https://github.com/programmrm/Metro",
-                  "language": p["language"],
-                  "tvTypes": p["tvTypes"],
-                  "iconUrl": p["iconUrl"],
-                  "apiVersion": 1,
-                  "fileHash": "sha256-" + h
-              }
-              result.append(entry)
-          with open("plugins.json", "w") as f:
-              json.dump(result, f, ensure_ascii=False, indent=4)
-          print("plugins.json olusturuldu")'
+        run: python3 $GITHUB_WORKSPACE/src/.github/scripts/gen_plugins.py
 
-      - name: Push Compiled Plugins
+      - name: Push
         run: |
           cd $GITHUB_WORKSPACE/builds
           git config --local user.email "actions@github.com"
