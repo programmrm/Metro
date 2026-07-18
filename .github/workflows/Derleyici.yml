@@ -62,7 +62,7 @@ jobs:
                   "authors": ["programmer"], "status": 1
               },
               {
-                  "name": "Dizilla", "internalName": "Dizilla", "version": 95,
+                  "name": "Dizilla", "internalName": "Dizilla", "version": 96,
                   "description": "Dizilla platformu.",
                   "iconUrl": "https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%",
                   "tvTypes": ["TvSeries"], "language": "tr",
