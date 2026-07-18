@@ -116,7 +116,8 @@ class Dizilla : MainAPI() {
         "${mainUrl}/?page=1" to "Yeni Eklenenler",
         "${mainUrl}/?page=2" to "Popüler",
         "${mainUrl}/?page=3" to "Trend",
-        "${mainUrl}/?page=4" to "Yeni Bölümler"
+        "${mainUrl}/?page=4" to "Yeni Bölümler",
+        "${mainUrl}/?page=5" to "Güncel Bölümler"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -130,6 +131,7 @@ class Dizilla : MainAPI() {
                 "Popüler" -> "allPopularSeries"
                 "Trend" -> "getSeriesByAdvancedSliderWithDetail"
                 "Yeni Bölümler" -> "getEpisodesOnNewSeries"
+                "Güncel Bölümler" -> "getEpisodesOnBrandAll"
                 else -> return newHomePageResponse(request.name, emptyList())
             }
 
