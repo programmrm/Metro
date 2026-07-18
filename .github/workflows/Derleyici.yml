@@ -52,51 +52,49 @@ jobs:
       - name: Generate plugins.json
         run: |
           cd $GITHUB_WORKSPACE/builds
-          python3 -c "
+          python3 -u -c "
 import hashlib, json, os
-
 plugins = [
     {
         'name': 'DiziBox', 'internalName': 'DiziBox', 'version': 23,
-        'description': 'DiziBox — yabancı dizilerin yeni ve eski sezonlarını full hd izleyebileceğiniz platform.',
+        'description': 'DiziBox platformu.',
         'iconUrl': 'https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%',
         'tvTypes': ['TvSeries'], 'language': 'tr',
         'authors': ['programmer'], 'status': 1
     },
     {
         'name': 'Dizilla', 'internalName': 'Dizilla', 'version': 95,
-        'description': 'Dizilla — yabancı dizileri Türkçe dublaj ve altyazılı olarak 1080p kalitede sunar.',
+        'description': 'Dizilla platformu.',
         'iconUrl': 'https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%',
         'tvTypes': ['TvSeries'], 'language': 'tr',
         'authors': ['programmer'], 'status': 1
     },
     {
         'name': 'DiziPal', 'internalName': 'DiziPal', 'version': 91,
-        'description': 'DiziPal — en yeni dizileri güvenli ve hızlı şekilde sunar.',
+        'description': 'DiziPal platformu.',
         'iconUrl': 'https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%',
         'tvTypes': ['TvSeries', 'Movie'], 'language': 'tr',
         'authors': ['programmer', 'muratcesmecioglu'], 'status': 1
     },
     {
         'name': 'DiziPalOriginal', 'internalName': 'DiziPalOriginal', 'version': 68,
-        'description': 'DiziPalOriginal — en yeni dizileri güvenli ve hızlı şekilde sunar.',
+        'description': 'DiziPalOriginal platformu.',
         'iconUrl': 'https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%',
         'tvTypes': ['TvSeries', 'Movie'], 'language': 'tr',
         'authors': ['programmer', 'muratcesmecioglu'], 'status': 1
     }
 ]
-
 result = []
 for p in plugins:
     cs3 = p['internalName'] + '.cs3'
     if not os.path.exists(cs3):
-        print(f'UYARI: {cs3} bulunamadi, atlaniyor')
+        print('UYARI: ' + cs3 + ' bulunamadi, atlaniyor')
         continue
     with open(cs3, 'rb') as f:
         h = hashlib.sha256(f.read()).hexdigest()
     size = os.path.getsize(cs3)
     entry = {
-        'url': f'https://raw.githubusercontent.com/programmrm/Metro/builds/{cs3}',
+        'url': 'https://raw.githubusercontent.com/programmrm/Metro/builds/' + cs3,
         'status': p['status'],
         'version': p['version'],
         'name': p['name'],
@@ -112,7 +110,6 @@ for p in plugins:
         'fileHash': 'sha256-' + h
     }
     result.append(entry)
-
 with open('plugins.json', 'w') as f:
     json.dump(result, f, ensure_ascii=False, indent=4)
 print('plugins.json olusturuldu')
