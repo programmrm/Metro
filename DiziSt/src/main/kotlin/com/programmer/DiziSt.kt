@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
+import org.json.JSONObject
 
 class DiziSt : MainAPI() {
     override var mainUrl              = "https://dizist.live"
