@@ -214,10 +214,17 @@ open class ContentX : ExtractorApi() {
         // Try to extract subtitles from HLS master playlist
         if (subUrls.isEmpty()) {
             try {
-                for (match in Regex("""https?://[^"']+\.m3u8[^"']*""").findAll(vidSource)) {
-                    val m3uUrl = match.value
+                val m3uUrls = mutableSetOf<String>()
+                // source2.php has m.php URLs, not .m3u8 — convert m.php to master.m3u8
+                for (match in Regex("""https?://[^"'\s,}]+\.php[^"'\s,}]*""").findAll(vidSource)) {
+                    m3uUrls.add(match.value.replace("\\/", "/").replace("\\", "").replace("m.php", "master.m3u8"))
+                }
+                for (match in Regex("""https?://[^"'\s,}]+\.m3u8[^"'\s,}]*""").findAll(vidSource)) {
+                    m3uUrls.add(match.value.replace("\\/", "/").replace("\\", ""))
+                }
+                for (m3uUrl in m3uUrls) {
                     Log.d("Kekik_${this.name}", "Fetching M3U8 for subs: $m3uUrl")
-                    val m3uBody = app.get(m3uUrl, referer=extRef).text
+                    val m3uBody = try { app.get(m3uUrl, referer=extRef).text } catch (e: Exception) { continue }
                     for (subMatch in Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES[^#]*?URI="([^"]+)"[^#]*?LANGUAGE="([^"]+)"""").findAll(m3uBody)) {
                         val subUri = subMatch.groupValues[1]
                         val subLang = subMatch.groupValues[2]
