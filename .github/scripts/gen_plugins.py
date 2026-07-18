@@ -4,7 +4,7 @@ BUILDS = os.environ.get('GITHUB_WORKSPACE', '') + '/builds'
 
 plugins = [
     {
-        'name': 'DiziBox', 'internalName': 'DiziBox', 'version': 23,
+        'name': 'DiziBox', 'internalName': 'DiziBox', 'version': 24,
         'description': 'DiziBox platformu.',
         'iconUrl': 'https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%',
         'tvTypes': ['TvSeries'], 'language': 'tr',
