@@ -30,6 +30,13 @@ plugins = [
         'iconUrl': 'https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%',
         'tvTypes': ['TvSeries', 'Movie'], 'language': 'tr',
         'authors': ['programmer', 'muratcesmecioglu'], 'status': 1
+    },
+    {
+        'name': 'DiziSt', 'internalName': 'DiziSt', 'version': 1,
+        'description': 'Dizist platformu.',
+        'iconUrl': 'https://www.google.com/s2/favicons?domain=dizist.live&sz=%size%',
+        'tvTypes': ['TvSeries'], 'language': 'tr',
+        'authors': ['programmer'], 'status': 1
     }
 ]
 
