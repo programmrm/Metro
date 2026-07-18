@@ -45,7 +45,16 @@ jobs:
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
           ./gradlew make --continue || true
+          echo "=== CS3 files in src ==="
+          find . -name "*.cs3"
           find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
+          echo "=== CS3 files in builds ==="
+          ls -la $GITHUB_WORKSPACE/builds/
+
+      - name: Debug Dizilla build
+        run: |
+          cd $GITHUB_WORKSPACE/src
+          ./gradlew :Dizilla:compileDebugKotlin 2>&1; echo "EXIT: $?"
 
       - name: Generate plugins.json
         run: python3 $GITHUB_WORKSPACE/src/.github/scripts/gen_plugins.py
