@@ -41,7 +41,6 @@ open class ContentX : ExtractorApi() {
         suspend fun addSubtitle(subUrl: String, subLang: String) {
             val cleanUrl = subUrl.replace("\\/", "/").replace("\\", "")
             if (cleanUrl in subUrls) return
-            // Skip video sources misidentified as subtitles
             if (Regex("""\.m3u8|\.php""").containsMatchIn(cleanUrl)) {
                 Log.d("Kekik_${this.name}", "Skipping non-subtitle (video URL): $subLang → $cleanUrl")
                 return
@@ -53,7 +52,12 @@ open class ContentX : ExtractorApi() {
             subUrls.add(cleanUrl)
             Log.d("Kekik_${this.name}", "Subtitle added: $subLang → $cleanUrl")
             subtitleCallback.invoke(
-                SubtitleFile(lang = parseSubLang(subLang), url = fixUrl(cleanUrl))
+                newSubtitleFile(
+                    lang = parseSubLang(subLang),
+                    url = fixUrl(cleanUrl)
+                ) {
+                    headers = mapOf("Referer" to extRef)
+                }
             )
         }
 
