@@ -338,8 +338,41 @@ class Dizilla : MainAPI() {
             val iframe = if (rawIframe.startsWith("//")) "https:$rawIframe" else rawIframe
 
             Log.d("Dizilla", "iframe: $iframe")
-            loadExtractor(iframe, "${mainUrl}/", subtitleCallback, callback)
-            true
+
+            // Altyazıları doğrudan iframe sayfasından da çek (ekstraktor bulamasa dahi çalışır)
+            try {
+                val iframeDoc = app.get(iframe, referer = "${mainUrl}/").text
+                val subUrls = mutableSetOf<String>()
+
+                fun addSub(file: String, label: String) {
+                    val cleanUrl = file.replace("\\/", "/").replace("\\", "")
+                    if (cleanUrl in subUrls) return
+                    subUrls.add(cleanUrl)
+                    subtitleCallback.invoke(
+                        SubtitleFile(
+                            lang = label
+                                .replace("\\u0131", "ı").replace("\\u0130", "İ")
+                                .replace("\\u00fc", "ü").replace("\\u00e7", "ç")
+                                .replace("\\u011f", "ğ").replace("\\u015f", "ş")
+                                .replace("\\u00f6", "ö").replace("\\u00f6", "ö"),
+                            url = fixUrl(cleanUrl)
+                        )
+                    )
+                }
+
+                Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(iframeDoc).forEach {
+                    addSub(it.groupValues[1], it.groupValues[2])
+                }
+                Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(iframeDoc)?.groupValues?.getOrNull(1)?.let { tracksBlock ->
+                    Regex("""file\s*:\s*["']([^"']+)[^}]*?label\s*:\s*["']([^"']+)""").findAll(tracksBlock).forEach {
+                        addSub(it.groupValues[1], it.groupValues[2])
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("Dizilla", "iframe subtitle extraction error: ${e.message}")
+            }
+
+            return loadExtractor(iframe, "${mainUrl}/", subtitleCallback, callback)
         } catch (e: Exception) {
             Log.e("Dizilla", "loadLinks error: ${e.message}")
             false

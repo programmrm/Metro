@@ -24,9 +24,9 @@ class DiziBox : MainAPI() {
     override val supportedTypes       = setOf(TvType.TvSeries)
 
     // ! CloudFlare bypass
-    override var sequentialMainPage = true        // * https://recloudstream.github.io/dokka/library/com.lagradost.cloudstream3/-main-a-p-i/index.html#-2049735995%2FProperties%2F101969414
-    override var sequentialMainPageDelay       = 50L  // ? 0.05 saniye
-    override var sequentialMainPageScrollDelay = 50L  // ? 0.05 saniye
+    override var sequentialMainPage = true
+    override var sequentialMainPageDelay       = 50L
+    override var sequentialMainPageScrollDelay = 50L
 
     // ! CloudFlare v2
     private val cloudflareKiller by lazy { CloudflareKiller() }
@@ -180,6 +180,30 @@ private fun Element.toMainPageResult(): SearchResponse? {
         }
     }
 
+    private fun extractSubtitles(source: String, subtitleCallback: (SubtitleFile) -> Unit) {
+        val subUrls = mutableSetOf<String>()
+        Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(source).forEach {
+            val file = it.groupValues[1].replace("\\/", "/").replace("\\", "")
+            val label = it.groupValues[2]
+                .replace("\\u0131", "ı").replace("\\u0130", "İ")
+                .replace("\\u00fc", "ü").replace("\\u00e7", "ç")
+            if (file !in subUrls) {
+                subUrls.add(file)
+                subtitleCallback.invoke(SubtitleFile(lang = label, url = fixUrl(file)))
+            }
+        }
+        Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(source)?.groupValues?.getOrNull(1)?.let { tracks ->
+            Regex("""file\s*:\s*["']([^"']+)[^}]*?label\s*:\s*["']([^"']+)""").findAll(tracks).forEach {
+                val file = it.groupValues[1].replace("\\/", "/").replace("\\", "")
+                val label = it.groupValues[2]
+                if (file !in subUrls) {
+                    subUrls.add(file)
+                    subtitleCallback.invoke(SubtitleFile(lang = label, url = fixUrl(file)))
+                }
+            }
+        }
+    }
+
     private suspend fun iframeDecode(data:String, iframe:String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         @Suppress("NAME_SHADOWING") var iframe = iframe
 
@@ -198,10 +222,16 @@ private fun Element.toMainPageResult(): SearchResponse? {
             val subFrame = subDoc.selectFirst("div#Player iframe")?.attr("src") ?: return false
 
             val iDoc          = app.get(subFrame, referer="${mainUrl}/").text
+
+            extractSubtitles(iDoc, subtitleCallback)
+
             val cryptData     = Regex("""CryptoJS\.AES\.decrypt\("(.*)","""").find(iDoc)?.groupValues?.get(1) ?: return false
-            val cryptPass     = Regex("""","(.*)"\);""").find(iDoc)?.groupValues?.get(1) ?: return false
+            val cryptPass     = Regex("","(.*)"\);""").find(iDoc)?.groupValues?.get(1) ?: return false
             val decryptedData = CryptoJS.decrypt(cryptPass, cryptData)
             val decryptedDoc  = Jsoup.parse(decryptedData)
+
+            extractSubtitles(decryptedDoc.html(), subtitleCallback)
+
             val vidUrl        = Regex("""file: '(.*)',""").find(decryptedDoc.html())?.groupValues?.get(1) ?: return false
 
             callback.invoke(
@@ -209,10 +239,10 @@ private fun Element.toMainPageResult(): SearchResponse? {
                     source = this.name,
                     name = this.name,
                     url = vidUrl,
-                    type = ExtractorLinkType.M3U8 // Tür olarak M3U8 ayarlandı
+                    type = ExtractorLinkType.M3U8
                 ) {
-                    headers = mapOf("Referer" to vidUrl) // Referer başlığı ayarlandı
-                    quality = getQualityFromName("4k") // Kalite ayarlandı
+                    headers = mapOf("Referer" to vidUrl)
+                    quality = getQualityFromName("4k")
                 }
             )
 
@@ -235,6 +265,8 @@ private fun Element.toMainPageResult(): SearchResponse? {
                 val strAtob     = String(Base64.decode(decodedAtob, Base64.DEFAULT), Charsets.UTF_8)
                 subDoc          = Jsoup.parse(strAtob)
             }
+
+            extractSubtitles(subDoc.html(), subtitleCallback)
 
             val subFrame = subDoc.selectFirst("div#Player iframe")?.attr("src") ?: return false
 
@@ -259,6 +291,8 @@ private fun Element.toMainPageResult(): SearchResponse? {
                 val strAtob     = String(Base64.decode(decodedAtob, Base64.DEFAULT), Charsets.UTF_8)
                 subDoc          = Jsoup.parse(strAtob)
             }
+
+            extractSubtitles(subDoc.html(), subtitleCallback)
 
             val subFrame = subDoc.selectFirst("div#Player iframe")?.attr("src") ?: return false
 

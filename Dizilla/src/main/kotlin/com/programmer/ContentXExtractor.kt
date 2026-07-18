@@ -19,21 +19,41 @@ open class ContentX : ExtractorApi() {
         val iExtract = Regex("""window\.openPlayer\('([^']+)'""").find(iSource)!!.groups[1]?.value ?: throw ErrorLoadingException("iExtract is null")
 
         val subUrls = mutableSetOf<String>()
-        Regex(""""file":"([^"]+)","label":"([^"]+)"""").findAll(iSource).forEach {
-            val (subUrl, subLang) = it.destructured
 
-            if (subUrl in subUrls) { return@forEach }
-            subUrls.add(subUrl)
+        fun parseSubLang(s: String): String = s
+            .replace("\\u0131", "ı").replace("\\u0130", "İ")
+            .replace("\\u00fc", "ü").replace("\\u00e7", "ç")
+            .replace("\\u011f", "ğ").replace("\\u015f", "ş")
+            .replace("\\u00f6", "ö").replace("\\u00f6", "ö")
 
+        fun addSubtitle(subUrl: String, subLang: String) {
+            val cleanUrl = subUrl.replace("\\/", "/").replace("\\", "")
+            if (cleanUrl in subUrls) return
+            subUrls.add(cleanUrl)
             subtitleCallback.invoke(
-                SubtitleFile(
-                    lang = subLang.replace("\\u0131", "ı").replace("\\u0130", "İ").replace("\\u00fc", "ü").replace("\\u00e7", "ç"),
-                    url  = fixUrl(subUrl.replace("\\", ""))
-                )
+                SubtitleFile(lang = parseSubLang(subLang), url = fixUrl(cleanUrl))
             )
         }
 
+        // Pattern 1: JSON "file":"...","label":"..." (extra fields tolerated via [^}]*)
+        Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(iSource).forEach {
+            addSubtitle(it.groupValues[1], it.groupValues[2])
+        }
+
+        // Pattern 2: JWPlayer tracks array
+        Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(iSource)?.groupValues?.getOrNull(1)?.let { tracksBlock ->
+            Regex("""file\s*:\s*["']([^"']+)[^}]*?label\s*:\s*["']([^"']+)""").findAll(tracksBlock).forEach {
+                addSubtitle(it.groupValues[1], it.groupValues[2])
+            }
+        }
+
         val vidSource  = app.get("${mainUrl}/source2.php?v=${iExtract}", referer=extRef).text
+
+        // Pattern 3: Subtitles in the video source JSON response
+        Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(vidSource).forEach {
+            addSubtitle(it.groupValues[1], it.groupValues[2])
+        }
+
         val vidExtract = Regex("""file":"([^"]+)""").find(vidSource)!!.groups[1]?.value ?: throw ErrorLoadingException("vidExtract is null")
         val m3uLink    = vidExtract.replace("\\", "")
 
