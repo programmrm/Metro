@@ -4,6 +4,9 @@ package com.programmer
 
 import android.util.Base64
 import android.util.Log
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
@@ -13,7 +16,7 @@ import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
-import org.json.JSONObject
+import java.nio.charset.StandardCharsets
 
 class DiziSt : MainAPI() {
     override var mainUrl              = "https://dizist.live"
@@ -27,6 +30,7 @@ class DiziSt : MainAPI() {
     override var sequentialMainPageDelay       = 50L
     override var sequentialMainPageScrollDelay = 50L
 
+    private val mapper by lazy { ObjectMapper().registerModule(KotlinModule()) }
     private val cloudflareKiller by lazy { CloudflareKiller() }
     private val interceptor      by lazy { CloudflareInterceptor(cloudflareKiller) }
 
@@ -39,7 +43,6 @@ class DiziSt : MainAPI() {
             if (response.code == 503 || doc.selectFirst("meta[name='cloudflare']") != null) {
                 return cloudflareKiller.intercept(chain)
             }
-
             return response
         }
     }
@@ -212,7 +215,7 @@ class DiziSt : MainAPI() {
             val atobData = Regex("""unescape\("(.*)"\)""").find(subDoc.html())?.groupValues?.get(1)
             if (atobData != null) {
                 val decodedAtob = atobData.decodeUri()
-                val strAtob     = String(Base64.decode(decodedAtob, Base64.DEFAULT), Charsets.UTF_8)
+                val strAtob     = String(Base64.decode(decodedAtob, Base64.DEFAULT), StandardCharsets.UTF_8)
                 subDoc          = Jsoup.parse(strAtob)
             }
 
@@ -233,7 +236,7 @@ class DiziSt : MainAPI() {
             val atobData = Regex("""unescape\("(.*)"\)""").find(subDoc.html())?.groupValues?.get(1)
             if (atobData != null) {
                 val decodedAtob = atobData.decodeUri()
-                val strAtob     = String(Base64.decode(decodedAtob, Base64.DEFAULT), Charsets.UTF_8)
+                val strAtob     = String(Base64.decode(decodedAtob, Base64.DEFAULT), StandardCharsets.UTF_8)
                 subDoc          = Jsoup.parse(strAtob)
             }
 
@@ -247,36 +250,42 @@ class DiziSt : MainAPI() {
             val sourceUrl = "https://pichive.online/source2.php?v=$videoId"
             val sourceResp = app.get(sourceUrl, referer = data, interceptor = interceptor).text
 
-            // Parse JSON sources from source2.php
+            // Parse JSON sources from source2.php using Jackson
             try {
-                val json = JSONObject(sourceResp)
-                // Try multiple possible JSON structures
-                val sources = mutableListOf<JSONObject>()
+                val json = mapper.readTree(sourceResp)
+                val sources = mutableListOf<JsonNode>()
+
                 if (json.has("playlist")) {
-                    val playlist = json.getJSONArray("playlist")
-                    for (i in 0 until playlist.length()) {
-                        val item = playlist.getJSONObject(i)
-                        if (item.has("sources")) {
-                            val itemSources = item.getJSONArray("sources")
-                            for (j in 0 until itemSources.length()) {
-                                sources.add(itemSources.getJSONObject(j))
+                    val playlist = json.get("playlist")
+                    if (playlist.isArray) {
+                        for (i in 0 until playlist.size()) {
+                            val item = playlist.get(i)
+                            if (item.has("sources")) {
+                                val itemSources = item.get("sources")
+                                if (itemSources.isArray) {
+                                    for (j in 0 until itemSources.size()) {
+                                        sources.add(itemSources.get(j))
+                                    }
+                                }
+                            } else if (item.has("file")) {
+                                sources.add(item)
                             }
-                        } else if (item.has("file")) {
-                            sources.add(item)
                         }
                     }
                 } else if (json.has("sources")) {
-                    val jsonSources = json.getJSONArray("sources")
-                    for (i in 0 until jsonSources.length()) {
-                        sources.add(jsonSources.getJSONObject(i))
+                    val jsonSources = json.get("sources")
+                    if (jsonSources.isArray) {
+                        for (i in 0 until jsonSources.size()) {
+                            sources.add(jsonSources.get(i))
+                        }
                     }
                 } else if (json.has("file")) {
                     sources.add(json)
                 }
 
                 for (src in sources) {
-                    val file = src.optString("file", "").replace("\\/", "/")
-                    val title = src.optString("title", src.optString("label", this.name))
+                    val file = src.get("file")?.asText("")?.replace("\\/", "/") ?: continue
+                    val title = src.get("title")?.asText(src.get("label")?.asText(this.name))
                     if (file.contains(".m3u8") || file.contains(".mp4")) {
                         val quality = Regex("""(\d{3,4})[pP]""").find(title)?.groupValues?.get(1)?.toIntOrNull() ?: Qualities.Unknown.value
                         callback.invoke(
@@ -295,15 +304,17 @@ class DiziSt : MainAPI() {
 
                 // Extract subtitles from JSON tracks
                 if (json.has("tracks")) {
-                    val tracks = json.getJSONArray("tracks")
-                    for (i in 0 until tracks.length()) {
-                        val track = tracks.getJSONObject(i)
-                        val file = track.optString("file", "")
-                        val label = track.optString("label", "")
-                        if (file.isNotBlank() && label.isNotBlank()) {
-                            subtitleCallback.invoke(newSubtitleFile(label, fixUrl(file)) {
-                                headers = mapOf("Referer" to currentIframe)
-                            })
+                    val tracks = json.get("tracks")
+                    if (tracks.isArray) {
+                        for (i in 0 until tracks.size()) {
+                            val track = tracks.get(i)
+                            val file = track.get("file")?.asText("") ?: continue
+                            val label = track.get("label")?.asText("") ?: continue
+                            if (file.isNotBlank() && label.isNotBlank()) {
+                                subtitleCallback.invoke(newSubtitleFile(label, fixUrl(file)) {
+                                    headers = mapOf("Referer" to currentIframe)
+                                })
+                            }
                         }
                     }
                 }

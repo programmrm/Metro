@@ -8,4 +8,4 @@ cloudstream {
     status  = 1
     tvTypes = listOf("TvSeries")
     iconUrl = "https://www.google.com/s2/favicons?domain=dizist.live&sz=%size%"
-}// force rebuild
+}
