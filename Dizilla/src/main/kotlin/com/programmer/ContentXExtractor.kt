@@ -16,7 +16,7 @@ open class ContentX : ExtractorApi() {
         Log.d("Kekik_${this.name}", "url » $url")
 
         val iSource  = app.get(url, referer=extRef).text
-        val iExtract = Regex("""window\.openPlayer\('([^']+)'""").find(iSource)!!.groups[1]?.value ?: throw ErrorLoadingException("iExtract is null")
+        val iExtract = Regex("""window\.openPlayer\('([^']+)'""").find(iSource)?.groups?.get(1)?.value ?: return
 
         val subUrls = mutableSetOf<String>()
 
@@ -54,7 +54,7 @@ open class ContentX : ExtractorApi() {
             addSubtitle(it.groupValues[1], it.groupValues[2])
         }
 
-        val vidExtract = Regex("""file":"([^"]+)""").find(vidSource)!!.groups[1]?.value ?: throw ErrorLoadingException("vidExtract is null")
+        val vidExtract = Regex("""file":"([^"]+)""").find(vidSource)?.groups?.get(1)?.value ?: return
         val m3uLink    = vidExtract.replace("\\", "")
 
         callback.invoke(
@@ -72,7 +72,7 @@ open class ContentX : ExtractorApi() {
         val iDublaj = Regex(""","([^']+)","Türkçe""").find(iSource)?.groups?.get(1)?.value
         if (iDublaj != null) {
             val dublajSource  = app.get("${mainUrl}/source2.php?v=${iDublaj}", referer=extRef).text
-            val dublajExtract = Regex("""file":"([^"]+)""").find(dublajSource)!!.groups[1]?.value ?: throw ErrorLoadingException("dublajExtract is null")
+            val dublajExtract = Regex("""file":"([^"]+)""").find(dublajSource)?.groups?.get(1)?.value ?: return
             val dublajLink    = dublajExtract.replace("\\", "")
 
             callback.invoke(
