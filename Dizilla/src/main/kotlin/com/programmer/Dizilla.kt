@@ -84,7 +84,6 @@ class Dizilla : MainAPI() {
     private fun pickPoster(item: JsonNode): String? {
         for (key in listOf("poster_url", "face_url", "back_url", "brand_url", "logo_url")) {
             val url = item.get(key)?.asText() ?: continue
-            if (url.contains("file.macellan.online")) continue
             if (url.endsWith("/")) continue
             return url
         }
@@ -113,11 +112,11 @@ class Dizilla : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/?page=1" to "Yeni Eklenenler",
-        "${mainUrl}/?page=2" to "Popüler",
-        "${mainUrl}/?page=3" to "Trend",
-        "${mainUrl}/?page=4" to "Yeni Bölümler",
-        "${mainUrl}/?page=5" to "Güncel Bölümler"
+        "${mainUrl}/?page=1" to "Güncel Bölümler",
+        "${mainUrl}/?page=2" to "Yeni Eklenenler",
+        "${mainUrl}/?page=3" to "Popüler",
+        "${mainUrl}/?page=4" to "Trend",
+        "${mainUrl}/?page=5" to "Yeni Bölümler"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
