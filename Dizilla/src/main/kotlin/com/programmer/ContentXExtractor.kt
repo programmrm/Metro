@@ -57,8 +57,8 @@ open class ContentX : ExtractorApi() {
                     url = fixUrl(cleanUrl)
                 ) {
                     headers = mapOf(
-                        "Referer" to extRef,
-                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        "Referer" to url,
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
                     )
                 }
             )
@@ -94,8 +94,8 @@ open class ContentX : ExtractorApi() {
             makeLink(sourceName, file, quality)
         }
 
-        // Subtitles from iframe page
-        for (match in Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(iSource)) {
+        // Subtitles from iframe page (matching DiziPal's approach)
+        for (match in Regex(""""file":"((?:\\\\\"|[^"])+)","label":"((?:\\\\\"|[^"])+)"""").findAll(iSource)) {
             addSubtitle(match.groupValues[1], match.groupValues[2])
         }
         val tracksMatch = Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(iSource)
