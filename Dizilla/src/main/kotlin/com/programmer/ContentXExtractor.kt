@@ -56,7 +56,10 @@ open class ContentX : ExtractorApi() {
                     lang = parseSubLang(subLang),
                     url = fixUrl(cleanUrl)
                 ) {
-                    headers = mapOf("Referer" to extRef)
+                    headers = mapOf(
+                        "Referer" to extRef,
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
                 }
             )
         }
