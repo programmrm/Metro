@@ -33,8 +33,7 @@ jobs:
       - name: Clear Old Builds and Folders
         run: |
           cd $GITHUB_WORKSPACE/builds
-          find . -maxdepth 1 -type d ! -name '.' ! -name '.git' -exec rm -rf {} +
-          rm -f *.cs3 || true
+          rm -rf *.cs3 *.json *.yml README.md 2>/dev/null || true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -53,9 +52,13 @@ jobs:
           chmod +x gradlew
           ./gradlew make makePluginsJson --continue || true
           find . -name "*.cs3" -exec cp {} $GITHUB_WORKSPACE/builds/ \;
-          if [ -f "build/plugins.json" ]; then
-            cp build/plugins.json $GITHUB_WORKSPACE/builds/
-          fi
+          # plugins.json farklı gradle versiyonlarında farklı yerde olabilir
+          for p in build/plugins.json build/plugin/plugins.json app/build/plugins.json; do
+            if [ -f "$p" ]; then
+              cp "$p" $GITHUB_WORKSPACE/builds/plugins.json
+              break
+            fi
+          done
 
       - name: Push Compiled Plugins
         run: |
