@@ -51,10 +51,7 @@ jobs:
           echo "=== CS3 files in builds ==="
           ls -la $GITHUB_WORKSPACE/builds/
 
-      - name: Debug Dizilla build
-        run: |
-          cd $GITHUB_WORKSPACE/src
-          ./gradlew :Dizilla:compileDebugKotlin 2>&1; echo "EXIT: $?"
+
 
       - name: Generate plugins.json
         run: python3 $GITHUB_WORKSPACE/src/.github/scripts/gen_plugins.py

@@ -38,7 +38,7 @@ open class ContentX : ExtractorApi() {
             .replace("\\u011f", "ğ").replace("\\u015f", "ş")
             .replace("\\u00f6", "ö").replace("\\u00f6", "ö")
 
-        fun addSubtitle(subUrl: String, subLang: String) {
+        suspend fun addSubtitle(subUrl: String, subLang: String) {
             val cleanUrl = subUrl.replace("\\/", "/").replace("\\", "")
             if (cleanUrl in subUrls) return
             subUrls.add(cleanUrl)
@@ -47,7 +47,7 @@ open class ContentX : ExtractorApi() {
             )
         }
 
-        fun makeLink(linkName: String, videoUrl: String, quality: Int = Qualities.Unknown.value) {
+        suspend fun makeLink(linkName: String, videoUrl: String, quality: Int = Qualities.Unknown.value) {
             val cleanUrl = videoUrl.replace("\\/", "/").replace("\\", "")
             val m3uUrl = cleanUrl.replace("m.php", "master.m3u8")
             Log.d("Kekik_${this.name}", "Link: $linkName → $m3uUrl")
@@ -64,38 +64,40 @@ open class ContentX : ExtractorApi() {
             )
         }
 
-        // Subtitles from iframe page
-        Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(iSource).forEach {
-            addSubtitle(it.groupValues[1], it.groupValues[2])
+        suspend fun extractSource(file: String, title: String) {
+            val isDub = title.contains("dub", ignoreCase = true) || title.contains("dublaj", ignoreCase = true)
+            val isSub = title.contains("alt", ignoreCase = true) || title.contains("sub", ignoreCase = true) || title.contains("orijinal", ignoreCase = true) || title.contains("original", ignoreCase = true)
+            val sourceName = when {
+                isDub -> "${this.name} - Türkçe Dublaj"
+                isSub -> "${this.name} - Altyazılı"
+                else -> title
+            }
+            val quality = Regex("""(\d{3,4})[pP]""").find(title)?.groupValues?.get(1)?.toIntOrNull() ?: Qualities.Unknown.value
+            Log.d("Kekik_${this.name}", "JSON source: $sourceName → $file")
+            makeLink(sourceName, file, quality)
         }
-        Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(iSource)?.groupValues?.getOrNull(1)?.let { tracksBlock ->
-            Regex("""file\s*:\s*["']([^"']+)[^}]*?label\s*:\s*["']([^"']+)""").findAll(tracksBlock).forEach {
-                addSubtitle(it.groupValues[1], it.groupValues[2])
+
+        // Subtitles from iframe page
+        for (match in Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(iSource)) {
+            addSubtitle(match.groupValues[1], match.groupValues[2])
+        }
+        val tracksMatch = Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(iSource)
+        if (tracksMatch != null) {
+            val tracksBlock = tracksMatch.groupValues[1]
+            for (match in Regex("""file\s*:\s*["']([^"']+)[^}]*?label\s*:\s*["']([^"']+)""").findAll(tracksBlock)) {
+                addSubtitle(match.groupValues[1], match.groupValues[2])
             }
         }
 
         val vidSource  = app.get("${mainUrl}/source2.php?v=${iExtract}", referer=extRef).text
         Log.d("Kekik_${this.name}", "source2.php response length: ${vidSource.length}")
 
-        // Try JSON parsing first
         var linksCreated = false
+
+        // Try JSON parsing first
         try {
             val json = mapper.readTree(vidSource)
             Log.d("Kekik_${this.name}", "JSON keys: ${json.fieldNames().asSequence().joinToString()}")
-
-            fun extractSource(file: String, title: String) {
-                val isDub = title.contains("dub", ignoreCase = true) || title.contains("dublaj", ignoreCase = true)
-                val isSub = title.contains("alt", ignoreCase = true) || title.contains("sub", ignoreCase = true) || title.contains("orijinal", ignoreCase = true) || title.contains("original", ignoreCase = true)
-                val sourceName = when {
-                    isDub -> "${this.name} - Türkçe Dublaj"
-                    isSub -> "${this.name} - Altyazılı"
-                    else -> title
-                }
-                val quality = Regex("""(\d{3,4})[pP]""").find(title)?.groupValues?.get(1)?.toIntOrNull() ?: Qualities.Unknown.value
-                Log.d("Kekik_${this.name}", "JSON source: $sourceName → $file")
-                makeLink(sourceName, file, quality)
-                linksCreated = true
-            }
 
             // Try playlist array (multiple sources)
             val playlist = json.get("playlist")
@@ -110,6 +112,7 @@ open class ContentX : ExtractorApi() {
                             val file = s.get("file")?.asText() ?: continue
                             val title = s.get("title")?.asText() ?: s.get("label")?.asText() ?: this.name
                             extractSource(file, title)
+                            linksCreated = true
                         }
                     }
                     // playlist[i].file (flat)
@@ -117,6 +120,7 @@ open class ContentX : ExtractorApi() {
                     if (flatFile != null) {
                         val title = item.get("title")?.asText() ?: item.get("label")?.asText() ?: this.name
                         extractSource(flatFile, title)
+                        linksCreated = true
                     }
                 }
             } else {
@@ -132,6 +136,7 @@ open class ContentX : ExtractorApi() {
                         val file = s.get("file")?.asText() ?: continue
                         val title = s.get("title")?.asText() ?: s.get("label")?.asText() ?: this.name
                         extractSource(file, title)
+                        linksCreated = true
                     }
                 }
             }
@@ -142,6 +147,7 @@ open class ContentX : ExtractorApi() {
                 if (topFile != null) {
                     val title = json.get("title")?.asText() ?: json.get("label")?.asText() ?: this.name
                     extractSource(topFile, title)
+                    linksCreated = true
                 }
             }
 
@@ -152,6 +158,7 @@ open class ContentX : ExtractorApi() {
                     val file = item.get("file")?.asText() ?: continue
                     val title = item.get("title")?.asText() ?: item.get("label")?.asText() ?: this.name
                     extractSource(file, title)
+                    linksCreated = true
                 }
             }
 
@@ -183,13 +190,13 @@ open class ContentX : ExtractorApi() {
         }
 
         // Always try regex subtitle extraction from source2.php
-        Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(vidSource).forEach {
-            addSubtitle(it.groupValues[1], it.groupValues[2])
+        for (match in Regex(""""file"\s*:\s*"([^"]+)"[^}]*"label"\s*:\s*"([^"]+)"""").findAll(vidSource)) {
+            addSubtitle(match.groupValues[1], match.groupValues[2])
         }
 
         if (!linksCreated) {
             Log.d("Kekik_${this.name}", "JSON produced no links, using regex fallback")
-            Regex("""file":"([^"]+)""").findAll(vidSource).forEach { match ->
+            for (match in Regex("""file":"([^"]+)""").findAll(vidSource)) {
                 val fileUrl = match.groupValues[1]
                 if (fileUrl.contains(".m3u8") || fileUrl.contains("m3u8") || fileUrl.contains(".php")) {
                     makeLink(this.name, fileUrl)
@@ -197,8 +204,9 @@ open class ContentX : ExtractorApi() {
                 }
             }
             if (!linksCreated) {
-                Regex("""file":"([^"]+)""").find(vidSource)?.groupValues?.getOrNull(1)?.let {
-                    makeLink(this.name, it)
+                val fallbackMatch = Regex("""file":"([^"]+)""").find(vidSource)
+                if (fallbackMatch != null) {
+                    makeLink(this.name, fallbackMatch.groupValues[1])
                 }
             }
         }
@@ -206,11 +214,11 @@ open class ContentX : ExtractorApi() {
         // Try to extract subtitles from HLS master playlist
         if (subUrls.isEmpty()) {
             try {
-                Regex("""https?://[^"']+\.m3u8[^"']*""").findAll(vidSource).forEach { match ->
+                for (match in Regex("""https?://[^"']+\.m3u8[^"']*""").findAll(vidSource)) {
                     val m3uUrl = match.value
                     Log.d("Kekik_${this.name}", "Fetching M3U8 for subs: $m3uUrl")
                     val m3uBody = app.get(m3uUrl, referer=extRef).text
-                    Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES[^#]*?URI="([^"]+)"[^#]*?LANGUAGE="([^"]+)"""").findAll(m3uBody).forEach { subMatch ->
+                    for (subMatch in Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES[^#]*?URI="([^"]+)"[^#]*?LANGUAGE="([^"]+)"""").findAll(m3uBody)) {
                         val subUri = subMatch.groupValues[1]
                         val subLang = subMatch.groupValues[2]
                         val subFullUrl = if (subUri.startsWith("http")) subUri else
