@@ -4,16 +4,11 @@ package com.programmer
 
 import android.util.Base64
 import android.util.Log
-import org.jsoup.nodes.Element
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
-import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
-import okhttp3.Interceptor
-import okhttp3.Response
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 
 class DiziBox : MainAPI() {
     override var mainUrl              = "https://www.dizibox.live"
@@ -23,31 +18,25 @@ class DiziBox : MainAPI() {
     override val hasQuickSearch       = false
     override val supportedTypes       = setOf(TvType.TvSeries)
 
-    // ! CloudFlare bypass
     override var sequentialMainPage = true
     override var sequentialMainPageDelay       = 50L
     override var sequentialMainPageScrollDelay = 50L
 
-    // ! CloudFlare v2
-    private val cloudflareKiller by lazy { CloudflareKiller() }
-    private val interceptor      by lazy { CloudflareInterceptor(cloudflareKiller) }
-
-    class CloudflareInterceptor(private val cloudflareKiller: CloudflareKiller): Interceptor {
-        override fun intercept(chain: Interceptor.Chain): Response {
-            val request  = chain.request()
-            val response = chain.proceed(request)
-            val doc      = Jsoup.parse(response.peekBody(10 * 1024).string())
-
-            if (response.code == 503 || doc.selectFirst("meta[name='cloudflare']") != null) {
-                return cloudflareKiller.intercept(chain)
-            }
-
-            return response
-        }
-    }
+    private fun req(url: String, ref: String? = null) = app.get(
+        url,
+        referer = ref,
+        cookies = mapOf(
+            "LockUser"      to "true",
+            "isTrustedUser" to "true",
+            "dbxu"          to "1743289650198"
+        ),
+        headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    )
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/ulke/turkiye"              to "Yerli",
+        "${mainUrl}/ulke/turkiye"      to "Yerli",
         "${mainUrl}/dizi-arsivi/page/SAYFA/"   to "Dizi Arşivi",
         "${mainUrl}/tur/aile/page/SAYFA/"      to "Aile",
         "${mainUrl}/tur/aksiyon/page/SAYFA"    to "Aksiyon",
@@ -77,15 +66,7 @@ class DiziBox : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url      = request.data.replace("SAYFA", "$page")
-        val document = app.get(
-            url,
-            cookies     = mapOf(
-                "LockUser"      to "true",
-                "isTrustedUser" to "true",
-                "dbxu"          to "1743289650198"
-            ),
-            interceptor = interceptor, cacheTime = 60
-        ).document
+        val document = req(url).document
         if (request.name == "Dizi Arşivi") {
             val home = document.select("article.detailed-article").mapNotNull { it.toMainPageResult() }
             return newHomePageResponse(request.name, home)
@@ -109,31 +90,14 @@ private fun Element.toMainPageResult(): SearchResponse? {
 }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = app.get(
-            "${mainUrl}/?s=${query}",
-            cookies     = mapOf(
-                "LockUser"      to "true",
-                "isTrustedUser" to "true",
-                "dbxu"          to "1743289650198"
-            ),
-            interceptor = interceptor
-        ).document
-
+        val document = req("${mainUrl}/?s=${query}").document
         return document.select("article.detailed-article").mapNotNull { it.toMainPageResult() }
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(
-            url,
-            cookies     = mapOf(
-                "LockUser"      to "true",
-                "isTrustedUser" to "true",
-                "dbxu"          to "1743289650198"
-            ),
-            interceptor = interceptor
-        ).document
+        val document = req(url).document
 
         val title       = document.selectFirst("div.tv-overview h1 a")?.text()?.trim() ?: return null
         val poster      = fixUrlNull(document.selectFirst("div.tv-overview figure img")?.attr("src"))
@@ -146,15 +110,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
         val episodeList = mutableListOf<Episode>()
         document.select("div#seasons-list a").forEach {
             val epUrl = fixUrlNull(it.attr("href")) ?: return@forEach
-            val epDoc = app.get(
-                epUrl,
-                cookies     = mapOf(
-                    "LockUser"      to "true",
-                    "isTrustedUser" to "true",
-                    "dbxu"          to "1743289650198"
-                ),
-                interceptor = interceptor
-            ).document
+            val epDoc = req(epUrl).document
 
             epDoc.select("article.grid-box").forEach ep@ { epElem ->
                 val epTitle   = epElem.selectFirst("div.post-title a")?.text()?.trim() ?: return@ep
@@ -189,7 +145,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
                 .replace("\\u00fc", "ü").replace("\\u00e7", "ç")
             if (file !in subUrls) {
                 subUrls.add(file)
-                subtitleCallback.invoke(SubtitleFile(lang = label, url = fixUrl(file)))
+                subtitleCallback.invoke(newSubtitleFile(label, fixUrl(file)))
             }
         }
         Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(source)?.groupValues?.getOrNull(1)?.let { tracks ->
@@ -198,7 +154,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
                 val label = it.groupValues[2]
                 if (file !in subUrls) {
                     subUrls.add(file)
-                    subtitleCallback.invoke(SubtitleFile(lang = label, url = fixUrl(file)))
+                    subtitleCallback.invoke(newSubtitleFile(label, fixUrl(file)))
                 }
             }
         }
@@ -209,19 +165,10 @@ private fun Element.toMainPageResult(): SearchResponse? {
 
         if (iframe.contains("/player/king/king.php")) {
             iframe = iframe.replace("king.php?v=", "king.php?wmode=opaque&v=")
-            val subDoc = app.get(
-                iframe,
-                referer     = data,
-                cookies     = mapOf(
-                    "LockUser"      to "true",
-                    "isTrustedUser" to "true",
-                    "dbxu"          to "1743289650198"
-                ),
-                interceptor = interceptor
-            ).document
+            val subDoc = req(iframe, ref = data).document
             val subFrame = subDoc.selectFirst("div#Player iframe")?.attr("src") ?: return false
 
-            val iDoc          = app.get(subFrame, referer="${mainUrl}/").text
+            val iDoc          = req(subFrame, ref = "${mainUrl}/").text
 
             extractSubtitles(iDoc, subtitleCallback)
 
@@ -248,16 +195,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
 
         } else if (iframe.contains("/player/moly/moly.php")) {
             iframe = iframe.replace("moly.php?h=", "moly.php?wmode=opaque&h=")
-            var subDoc = app.get(
-                iframe,
-                referer     = data,
-                cookies     = mapOf(
-                    "LockUser"      to "true",
-                    "isTrustedUser" to "true",
-                    "dbxu"          to "1743289650198"
-                ),
-                interceptor = interceptor
-            ).document
+            var subDoc = req(iframe, ref = data).document
 
             val atobData = Regex("""unescape\("(.*)"\)""").find(subDoc.html())?.groupValues?.get(1)
             if (atobData != null) {
@@ -274,16 +212,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
 
         } else if (iframe.contains("/player/haydi.php")) {
             iframe = iframe.replace("haydi.php?v=", "haydi.php?wmode=opaque&v=")
-            var subDoc = app.get(
-                iframe,
-                referer     = data,
-                cookies     = mapOf(
-                    "LockUser"      to "true",
-                    "isTrustedUser" to "true",
-                    "dbxu"          to "1743289650198"
-                ),
-                interceptor = interceptor
-            ).document
+            var subDoc = req(iframe, ref = data).document
 
             val atobData = Regex("""unescape\("(.*)"\)""").find(subDoc.html())?.groupValues?.get(1)
             if (atobData != null) {
@@ -304,15 +233,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         Log.d("DZBX", "data » $data")
-        val document = app.get(
-            data,
-            cookies     = mapOf(
-                "LockUser"      to "true",
-                "isTrustedUser" to "true",
-                "dbxu"          to "1743289650198"
-            ),
-            interceptor = interceptor
-        ).document
+        val document = req(data).document
         var iframe = document.selectFirst("div#video-area iframe")?.attr("src")?: return false
         Log.d("DZBX", "iframe » $iframe")
 
@@ -320,15 +241,7 @@ private fun Element.toMainPageResult(): SearchResponse? {
 
         document.select("div.video-toolbar option[value]").forEach {
             val altLink = it.attr("value")
-            val subDoc  = app.get(
-                altLink,
-                cookies     = mapOf(
-                    "LockUser"      to "true",
-                    "isTrustedUser" to "true",
-                    "dbxu"          to "1743289650198"
-                ),
-                interceptor = interceptor
-            ).document
+            val subDoc  = req(altLink).document
             iframe = subDoc.selectFirst("div#video-area iframe")?.attr("src")?: return false
             Log.d("DZBX", "iframe » $iframe")
 
