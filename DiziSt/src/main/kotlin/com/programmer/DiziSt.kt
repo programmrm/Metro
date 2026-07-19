@@ -48,6 +48,7 @@ class DiziSt : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
+        "${mainUrl}"                     to "Yeni Eklenen Dizi Bölümleri",
         "${mainUrl}/yabanci-diziler"       to "Yabancı Diziler",
         "${mainUrl}/animeler"              to "Animeler",
         "${mainUrl}/asyadizileri"          to "Asya Dizileri",
@@ -55,16 +56,32 @@ class DiziSt : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url      = request.data + (if (page > 1) "/page/$page" else "")
         val document = app.get(
-            url,
+            request.data,
             cookies     = mapOf("LockUser" to "true", "isTrustedUser" to "true"),
             interceptor = interceptor,
             cacheTime   = 60
         ).document
 
-        val home = document.select("div.poster-mb-bx").mapNotNull { it.toMainPageResult() }
+        val home = if (request.name == "Yeni Eklenen Dizi Bölümleri") {
+            document.select("div.serie-box-mb").mapNotNull { it.toEpisodeResult() }
+        } else {
+            document.select("div.poster-mb-bx").mapNotNull { it.toMainPageResult() }
+        }
         return newHomePageResponse(request.name, home)
+    }
+
+    private fun Element.toEpisodeResult(): SearchResponse? {
+        val link = this.selectFirst("a[data-navigo]") ?: return null
+        val href = fixUrlNull(link.attr("href")) ?: return null
+        val title = this.selectFirst("h2.truncate")?.text()?.trim() ?: return null
+
+        val img = this.selectFirst(".poster-xs-image img")
+        val posterUrl = fixUrlNull(
+            img?.attr("data-src").takeIf { it?.isNotBlank() == true } ?: img?.attr("src")
+        )
+
+        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
     }
 
     private fun Element.toMainPageResult(): SearchResponse? {
