@@ -68,8 +68,8 @@ class DiziSt : MainAPI() {
     }
 
     private fun Element.toMainPageResult(): SearchResponse? {
-        val link = this.selectFirst("a.poster-long[href]") ?: return null
-        val title = link.attr("title").ifEmpty { link.selectFirst(".poster-long-subject")?.text() } ?: return null
+        val link = this.selectFirst("a[href]") ?: return null
+        val title = link.attr("title").ifEmpty { this.selectFirst(".poster-long-subject")?.text() } ?: return null
         val href = fixUrlNull(link.attr("href")) ?: return null
 
         val img = this.selectFirst(".poster-long-image img")
