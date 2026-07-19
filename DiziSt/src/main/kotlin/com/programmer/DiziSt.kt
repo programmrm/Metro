@@ -78,23 +78,34 @@ class DiziSt : MainAPI() {
 
         val img = this.selectFirst(".poster-xs-image img")
         val posterUrl = fixUrlNull(
-            img?.attr("data-src").takeIf { it?.isNotBlank() == true } ?: img?.attr("src")
+            img?.attr("data-src").takeIf { it?.isNotBlank() == true }
+                ?: img?.attr("src")
         )
 
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
     }
 
     private fun Element.toMainPageResult(): SearchResponse? {
-        val link = this.selectFirst("a[href]") ?: return null
-        val title = link.attr("title").ifEmpty { this.selectFirst(".poster-long-subject")?.text() } ?: return null
+        val link = this.selectFirst("a[data-navigo], a[href]") ?: return null
+        val title = link.attr("title").ifEmpty {
+            this.selectFirst(".poster-long-subject h2")?.text()
+                ?: this.selectFirst(".poster-long-subject")?.text()
+        } ?: return null
         val href = fixUrlNull(link.attr("href")) ?: return null
 
-        val img = this.selectFirst(".poster-long-image img")
+        val img = this.selectFirst(".poster-long-image a img, .poster-long-image img")
         val posterUrl = fixUrlNull(
-            img?.attr("data-src").takeIf { it?.isNotBlank() == true } ?: img?.attr("src")
+            img?.attr("data-src").takeIf { it?.isNotBlank() == true }
+                ?: img?.attr("src")
         )
 
-        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
+        val rating = this.selectFirst("span.rating")?.text()?.trim()?.toFloatOrNull()
+            ?: this.selectFirst(".poster-long-on span")?.text()?.trim()?.toFloatOrNull()
+
+        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+            this.posterUrl = posterUrl
+            this.score = rating?.let { Score.from10(it) }
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -117,17 +128,35 @@ class DiziSt : MainAPI() {
             interceptor = interceptor
         ).document
 
-        val title       = document.selectFirst("h1.pull-left a")?.text()?.trim() ?: return null
-        val poster      = fixUrlNull(document.selectFirst(".series-profile-image img")?.attr("src"))
+        val title = document.selectFirst("div.tv-overview h1 a")?.text()?.trim()
+            ?: document.selectFirst("h1.pull-left a")?.text()?.trim()
+            ?: document.selectFirst("title")?.text()?.trim()?.replace(" - Dizist", "")?.trim()
+            ?: return null
+
+        val poster = fixUrlNull(
+            document.selectFirst(".series-profile-image img")?.attr("data-src")
+                ?: document.selectFirst(".series-profile-image img")?.attr("src")
+                ?: document.selectFirst("div.tv-overview figure img")?.attr("src")
+                ?: document.selectFirst("img[alt*='$title']")?.attr("src")
+        )
+
         val description = document.selectFirst(".tv-story p")?.text()?.trim()
-        val year        = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
-        val tags        = document.select("a[href*='/tur/'], a[href*='/ulke/']").map { it.text() }
-        val actors      = document.select("a[href*='/oyuncu/']").map { Actor(it.text()) }
-        val trailer     = document.selectFirst("iframe[src*='youtube']")?.attr("src")
+            ?: document.selectFirst("div.summary p")?.text()?.trim()
+
+        val year = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
+
+        val tags = document.select("a[href*='/tur/'], a[href*='/ulke/']").map { it.text() }
+        val actors = document.select("a[href*='/oyuncu/']").map { Actor(it.text()) }
+        val trailer = document.selectFirst("iframe[src*='youtube']")?.attr("src")
+            ?: document.selectFirst("iframe[src*='youtube.com']")?.attr("src")
+
+        val rating = document.selectFirst(".series-profile-rating span")?.text()?.trim()?.toFloatOrNull()
+            ?: document.selectFirst("span.rating")?.text()?.trim()?.toFloatOrNull()
+            ?: document.selectFirst(".poster-long-on span.rating")?.text()?.trim()?.toFloatOrNull()
 
         val episodeList = mutableListOf<Episode>()
 
-        document.select("#seasons-list a[href]").forEach { seasonLink ->
+        document.select("div#seasons-list a[href], #seasons-list a[href]").forEach { seasonLink ->
             val seasonUrl = fixUrlNull(seasonLink.attr("href")) ?: return@forEach
             val seasonDoc = app.get(
                 seasonUrl,
@@ -136,9 +165,9 @@ class DiziSt : MainAPI() {
             ).document
 
             seasonDoc.select("article.grid-box").forEach ep@ { epElem ->
-                val epTitle   = epElem.selectFirst(".post-title a")?.text()?.trim() ?: return@ep
-                val epHref    = fixUrlNull(epElem.selectFirst(".post-title a")?.attr("href")) ?: return@ep
-                val epSeason  = Regex("""(\d+)\. ?Sezon""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                val epTitle = epElem.selectFirst(".post-title a")?.text()?.trim() ?: return@ep
+                val epHref = fixUrlNull(epElem.selectFirst(".post-title a")?.attr("href")) ?: return@ep
+                val epSeason = Regex("""(\d+)\. ?Sezon""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
                 val epEpisode = Regex("""(\d+)\. ?Bölüm""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull()
 
                 episodeList.add(newEpisode(epHref) {
@@ -151,9 +180,10 @@ class DiziSt : MainAPI() {
 
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodeList) {
             this.posterUrl = poster
-            this.plot      = description
-            this.year      = year
-            this.tags      = tags
+            this.plot = description
+            this.year = year
+            this.tags = tags
+            this.score = rating?.let { Score.from10(it) }
             addActors(actors)
             addTrailer(trailer)
         }
