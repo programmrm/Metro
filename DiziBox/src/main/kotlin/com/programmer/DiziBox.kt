@@ -5,6 +5,8 @@ package com.programmer
 import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
 import org.jsoup.Jsoup
@@ -174,14 +176,14 @@ private fun Element.toMainPageResult(): SearchResponse? {
 
             extractSubtitles(iDoc, subtitleCallback)
 
-            val cryptData     = Regex("""CryptoJS\.AES\.decrypt\("(.*)","""").find(iDoc)?.groupValues?.get(1) ?: return false
-            val cryptPass     = Regex("","(.*)"\);""").find(iDoc)?.groupValues?.get(1) ?: return false
+            val cryptData     = Regex("CryptoJS\\.AES\\.decrypt\\(\"(.*)\",\"").find(iDoc)?.groupValues?.get(1) ?: return false
+            val cryptPass     = Regex("\",\"(.*)\"\\);").find(iDoc)?.groupValues?.get(1) ?: return false
             val decryptedData = CryptoJS.decrypt(cryptPass, cryptData)
             val decryptedDoc  = Jsoup.parse(decryptedData)
 
             extractSubtitles(decryptedDoc.html(), subtitleCallback)
 
-            val vidUrl        = Regex("""file: '(.*)',""").find(decryptedDoc.html())?.groupValues?.get(1) ?: return false
+            val vidUrl        = Regex("file: '(.*)',").find(decryptedDoc.html())?.groupValues?.get(1) ?: return false
 
             callback.invoke(
                 newExtractorLink(
