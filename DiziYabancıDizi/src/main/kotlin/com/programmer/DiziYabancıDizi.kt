@@ -1,5 +1,6 @@
 package com.programmer
 
+import android.util.Log
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.network.CloudflareKiller
@@ -152,6 +153,95 @@ class DiziYabancıDizi : MainAPI() {
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+        Log.d("DZYBD", "data » $data")
+
+        val episodeRegex = Regex("""/dizi/(.+)/sezon-(\d+)/bolum-(\d+)""")
+        val match = episodeRegex.find(data) ?: return false
+        val slug = match.groupValues[1]
+        val season = match.groupValues[2]
+        val episode = match.groupValues[3]
+        val episodeSlug = "$slug/sezon-$season/bolum-$episode"
+
+        val document = app.get(
+            data,
+            cookies     = mapOf("LockUser" to "true", "isTrustedUser" to "true"),
+            interceptor = interceptor
+        ).document
+
+        val iframe = document.selectFirst("#video-area iframe")?.attr("src")
+        if (iframe != null) {
+            Log.d("DZYBD", "iframe » $iframe")
+            loadExtractor(iframe, "${mainUrl}/", subtitleCallback, callback)
+            return true
+        }
+
+        val apiResp = app.post(
+            "${mainUrl}/ajax/service",
+            cookies     = mapOf("LockUser" to "true", "isTrustedUser" to "true"),
+            interceptor = interceptor,
+            data        = mapOf("type" to "videoGet", "link" to episodeSlug, "hash" to "", "querytype" to "")
+        ).text
+
+        try {
+            val json = mapper.readTree(apiResp)
+            if (json.has("success") && json.get("success").asBoolean()) {
+                val apiIframe = json.get("api_iframe")?.asText()
+                if (apiIframe != null && apiIframe.isNotBlank()) {
+                    Log.d("DZYBD", "api_iframe » $apiIframe")
+                    loadExtractor(apiIframe, "${mainUrl}/", subtitleCallback, callback)
+                    return true
+                }
+
+                val sources = json.get("api")?.get("src")?.get("sources")
+                if (sources != null && sources.isArray) {
+                    for (i in 0 until sources.size()) {
+                        val src = sources.get(i)
+                        val file = src.get("file")?.asText()?.replace("\\/", "/") ?: continue
+                        val label = src.get("label")?.asText() ?: src.get("title")?.asText() ?: this.name
+
+                        if (file.contains(".m3u8") || file.contains(".mp4")) {
+                            val quality = Regex("""(\d{3,4})[pP]""").find(label)?.groupValues?.get(1)?.toIntOrNull() ?: -1
+                            callback.invoke(
+                                newExtractorLink(
+                                    source = this.name,
+                                    name = label,
+                                    url = file,
+                                    type = if (file.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                                ) {
+                                    this.referer = "${mainUrl}/"
+                                    this.quality = quality
+                                }
+                            )
+                        }
+                    }
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DZYBD", "API error: ${e.message}")
+        }
+
+        val resp2 = app.post(
+            "${mainUrl}/ajax/service",
+            cookies     = mapOf("LockUser" to "true", "isTrustedUser" to "true"),
+            interceptor = interceptor,
+            data        = mapOf("type" to "get_stream", "e_id" to episodeSlug, "v_lang" to "tr")
+        ).text
+
+        try {
+            val json = mapper.readTree(resp2)
+            if (json.has("success") && json.get("success").asBoolean()) {
+                val apiIframe = json.get("api_iframe")?.asText()
+                if (apiIframe != null && apiIframe.isNotBlank()) {
+                    Log.d("DZYBD", "stream_iframe » $apiIframe")
+                    loadExtractor(apiIframe, "${mainUrl}/", subtitleCallback, callback)
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DZYBD", "stream API error: ${e.message}")
+        }
+
         return false
     }
 }
