@@ -11,9 +11,6 @@ import javax.crypto.spec.SecretKeySpec
 import javax.crypto.spec.IvParameterSpec
 import kotlin.math.min
 
-/**
- * Conforming with CryptoJS AES method
- */
 @Suppress("unused", "SameParameterValue")
 object CryptoJS {
 
@@ -23,14 +20,8 @@ object CryptoJS {
     private const val AES         = "AES"
     private const val KDF_DIGEST  = "MD5"
 
-    // Seriously crypto-js, what's wrong with you?
     private const val APPEND      = "Salted__"
 
-    /**
-     * Encrypt
-     * @param password passphrase
-     * @param plainText plain string
-     */
     fun encrypt(password: String, plainText: String): String {
         val saltBytes = generateSalt(8)
         val key       = ByteArray(KEY_SIZE / 8)
@@ -43,8 +34,6 @@ object CryptoJS {
         cipher.init(Cipher.ENCRYPT_MODE, keyS, ivSpec)
 
         val cipherText = cipher.doFinal(plainText.toByteArray())
-        // Thanks kientux for this: https://gist.github.com/kientux/bb48259c6f2133e628ad
-        // Create CryptoJS-like encrypted!
         val sBytes     = APPEND.toByteArray()
         val b          = ByteArray(sBytes.size + saltBytes.size + cipherText.size)
         System.arraycopy(sBytes, 0, b, 0, sBytes.size)
@@ -54,12 +43,6 @@ object CryptoJS {
         return Base64.encodeToString(b, Base64.DEFAULT)
     }
 
-    /**
-     * Decrypt
-     * Thanks Artjom B. for this: http://stackoverflow.com/a/29152379/4405051
-     * @param password passphrase
-     * @param cipherText encrypted string
-     */
     fun decrypt(password: String, cipherText: String): String {
         val ctBytes         = Base64.decode(cipherText.toByteArray(), Base64.DEFAULT)
         val saltBytes       = Arrays.copyOfRange(ctBytes, 8, 16)
@@ -100,7 +83,6 @@ object CryptoJS {
             block = hash.digest(salt)
             hash.reset()
 
-            // Iterations
             for (i in 1 until iterations) {
                 block = hash.digest(block!!)
                 hash.reset()
@@ -117,7 +99,7 @@ object CryptoJS {
         System.arraycopy(derivedBytes, 0, resultKey, 0, keySize * 4)
         System.arraycopy(derivedBytes, keySize * 4, resultIv, 0, ivSize * 4)
 
-        return derivedBytes // key + iv
+        return derivedBytes
     }
 
     private fun generateSalt(length: Int): ByteArray {

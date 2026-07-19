@@ -5,8 +5,7 @@ package com.programmer
 import android.util.Base64
 import android.util.Log
 import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
@@ -16,6 +15,7 @@ import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 import java.nio.charset.StandardCharsets
 
 class DiziSt : MainAPI() {
@@ -30,7 +30,7 @@ class DiziSt : MainAPI() {
     override var sequentialMainPageDelay       = 50L
     override var sequentialMainPageScrollDelay = 50L
 
-    private val mapper by lazy { ObjectMapper().registerModule(KotlinModule()) }
+    private val mapper by lazy { jacksonObjectMapper() }
     private val cloudflareKiller by lazy { CloudflareKiller() }
     private val interceptor      by lazy { CloudflareInterceptor(cloudflareKiller) }
 
@@ -74,14 +74,14 @@ class DiziSt : MainAPI() {
 
         val img = this.selectFirst(".poster-long-image img")
         val posterUrl = fixUrlNull(
-            img?.attr("data-src").takeIf { it.isNotBlank() } ?: img?.attr("src")
+            img?.attr("data-src").takeIf { it?.isNotBlank() == true } ?: img?.attr("src")
         )
 
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = app.get(
+        val document = app.post(
             "${mainUrl}/bg/searchcontent",
             cookies     = mapOf("LockUser" to "true", "isTrustedUser" to "true"),
             interceptor = interceptor,
@@ -154,7 +154,7 @@ class DiziSt : MainAPI() {
                 subtitleCallback.invoke(SubtitleFile(lang = label, url = fixUrl(file)))
             }
         }
-        Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(source)?.groupValues?.getOrNull(1)?.let { tracks ->
+        Regex("""tracks\s*:\s*\[(.*?)\]""", setOf(RegexOption.DOT_MATCHES_ALL)).find(source)?.groupValues?.getOrNull(1)?.let { tracks ->
             Regex("""file\s*:\s*["']([^"']+)[^}]*?label\s*:\s*["']([^"']+)""").findAll(tracks).forEach {
                 val file = it.groupValues[1].replace("\\/", "/").replace("\\", "")
                 val label = it.groupValues[2]
@@ -182,8 +182,8 @@ class DiziSt : MainAPI() {
             val iDoc          = app.get(subFrame, referer = "${mainUrl}/").text
             extractSubtitles(iDoc, subtitleCallback)
 
-            val cryptData     = Regex("""CryptoJS\.AES\.decrypt\("(.*)","""").find(iDoc)?.groupValues?.get(1) ?: return false
-            val cryptPass     = Regex("","(.*)"\);""").find(iDoc)?.groupValues?.get(1) ?: return false
+            val cryptData     = Regex("CryptoJS\\.AES\\.decrypt\\(\"(.*)\",\"").find(iDoc)?.groupValues?.get(1) ?: return false
+            val cryptPass     = Regex("\",\"(.*)\"\\);").find(iDoc)?.groupValues?.get(1) ?: return false
             val decryptedData = CryptoJS.decrypt(cryptPass, cryptData)
             val decryptedDoc  = Jsoup.parse(decryptedData)
 
@@ -245,12 +245,10 @@ class DiziSt : MainAPI() {
             val subFrame = subDoc.selectFirst("div#Player iframe")?.attr("src") ?: return false
             loadExtractor(subFrame, "${mainUrl}/", subtitleCallback, callback)
         } else if (currentIframe.contains("pichive.online")) {
-            // Pichive player - extract source via source2.php
             val videoId = Regex("""[?&]v=([^&]+)""").find(currentIframe)?.groupValues?.get(1) ?: return false
             val sourceUrl = "https://pichive.online/source2.php?v=$videoId"
             val sourceResp = app.get(sourceUrl, referer = data, interceptor = interceptor).text
 
-            // Parse JSON sources from source2.php using Jackson
             try {
                 val json = mapper.readTree(sourceResp)
                 val sources = mutableListOf<JsonNode>()
@@ -285,9 +283,9 @@ class DiziSt : MainAPI() {
 
                 for (src in sources) {
                     val file = src.get("file")?.asText("")?.replace("\\/", "/") ?: continue
-                    val title = src.get("title")?.asText(src.get("label")?.asText(this.name))
+                    val title = src.get("title")?.asText(src.get("label")?.asText(this.name)) ?: this.name
                     if (file.contains(".m3u8") || file.contains(".mp4")) {
-                        val quality = Regex("""(\d{3,4})[pP]""").find(title)?.groupValues?.get(1)?.toIntOrNull() ?: Qualities.Unknown.value
+                        val quality = Regex("""(\d{3,4})[pP]""").find(title)?.groupValues?.get(1)?.toIntOrNull() ?: -1
                         callback.invoke(
                             newExtractorLink(
                                 source = this.name,
@@ -302,7 +300,6 @@ class DiziSt : MainAPI() {
                     }
                 }
 
-                // Extract subtitles from JSON tracks
                 if (json.has("tracks")) {
                     val tracks = json.get("tracks")
                     if (tracks.isArray) {
@@ -323,7 +320,6 @@ class DiziSt : MainAPI() {
             }
 
         } else {
-            // Fallback to generic extractor
             loadExtractor(currentIframe, "${mainUrl}/", subtitleCallback, callback)
         }
 
