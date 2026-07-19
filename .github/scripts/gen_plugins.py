@@ -37,6 +37,13 @@ plugins = [
         'iconUrl': 'https://www.google.com/s2/favicons?domain=dizist.live&sz=%size%',
         'tvTypes': ['TvSeries'], 'language': 'tr',
         'authors': ['programmer'], 'status': 1
+    },
+    {
+        'name': 'DiziYabancıDizi', 'internalName': 'DiziYabancıDizi', 'version': 1,
+        'description': 'YabancıDizi platformu.',
+        'iconUrl': 'https://www.google.com/s2/favicons?domain=yabancidizi.life&sz=%size%',
+        'tvTypes': ['TvSeries'], 'language': 'tr',
+        'authors': ['programmer'], 'status': 1
     }
 ]
 
