@@ -44,6 +44,13 @@ plugins = [
         'iconUrl': 'https://www.google.com/s2/favicons?domain=yabancidizi.life&sz=%size%',
         'tvTypes': ['TvSeries'], 'language': 'tr',
         'authors': ['programmer'], 'status': 1
+    },
+    {
+        'name': 'FilmHdCehennemi', 'internalName': 'FilmHdCehennemi', 'version': 1,
+        'description': 'HDFilmCehennemi — en yeni filmleri ve yabancı dizileri full HD kalitede izleyin.',
+        'iconUrl': 'https://www.google.com/s2/favicons?domain=hdfilmcehennemi.nl&sz=%size%',
+        'tvTypes': ['Movie', 'TvSeries'], 'language': 'tr',
+        'authors': ['programmer'], 'status': 1
     }
 ]
 
