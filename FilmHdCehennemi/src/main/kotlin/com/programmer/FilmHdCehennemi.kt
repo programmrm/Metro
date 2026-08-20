@@ -43,6 +43,7 @@ class FilmHdCehennemi : MainAPI() {
 
     override val mainPage = mainPageOf(
         "${mainUrl}/category/film-izle-2/"               to "Filmler",
+        "${mainUrl}/tur/bilim-kurgu-filmlerini-izleyin-5/" to "Bilim Kurgu",
         "${mainUrl}/yabancidiziizle-5/"                  to "Diziler",
         "${mainUrl}/film-robotu-1/"                      to "Keşfet",
         "${mainUrl}/dil/turkce-dublajli-film-izleyin-5/" to "Türkçe Dublaj",
