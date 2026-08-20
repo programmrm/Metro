@@ -17,7 +17,7 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 class Dizilla : MainAPI() {
-    override var mainUrl = "https://dizillahd.com"
+    override var mainUrl = "https://dizillahd.one"
     override var name = "Dizilla"
     override val hasMainPage = true
     override var lang = "tr"
