@@ -47,6 +47,7 @@ class FilmHdCehennemi : MainAPI() {
         "${mainUrl}/yabancidiziizle-5/"                  to "Diziler",
         "${mainUrl}/film-robotu-1/"                      to "Keşfet",
         "${mainUrl}/dil/turkce-dublajli-film-izleyin-5/" to "Türkçe Dublaj",
+        "${mainUrl}/yil/2026-filmleri-izle/"             to "2026 Yapımları",
         "${mainUrl}/yil/2025-filmleri-izle-3/"           to "2025 Yapımları"
     )
 
