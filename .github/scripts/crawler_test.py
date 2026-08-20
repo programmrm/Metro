@@ -197,6 +197,33 @@ def parse_list_items(html):
     return items
 
 
+def extract_subtitles(html):
+    """Embed sayfasindaki JWPlayer 'tracks' JSON'undan .vtt altyazilarini cikarir."""
+    subs = []
+    seen = set()
+    for m in re.finditer(r'"file"\s*:\s*"([^"]+\.vtt[^"]*)"[^}]*?"label"\s*:\s*"([^"]+)"', html):
+        raw_url, lang = m.group(1), m.group(2)
+        url = raw_url.replace("\\/", "/").replace("\\u0026", "&").replace("\\", "")
+        if url.startswith("http") and url not in seen:
+            seen.add(url)
+            subs.append((lang, url))
+    return subs
+
+
+def extract_m3u8_subtitles(m3u8_url, referer):
+    """Master playlist'teki EXT-X-MEDIA:TYPE=SUBTITLES altyazilarini cikarir."""
+    code, ctype, body = fetch(m3u8_url, referer=referer)
+    if code != 200:
+        return []
+    subs = []
+    for m in re.finditer(r'#EXT-X-MEDIA:TYPE=SUBTITLES[^#]*?URI="([^"]+)"[^#]*?LANGUAGE="([^"]+)"', body):
+        uri, lang = m.group(1), m.group(2)
+        if not uri.startswith("http"):
+            uri = m3u8_url[:m3u8_url.rfind("/")] + "/" + uri
+        subs.append((lang, uri))
+    return subs
+
+
 def main():
     ok = True
 
@@ -285,6 +312,36 @@ def main():
                     ok = False
             else:
                 ok = False
+
+    print("== 5) Altyazi (subtitle) cikarimi ==")
+    sub_items = []
+    # Film uzerinden .vtt track + m3u8 subtitle kontrol (filmlerde altyazi mevcut)
+    code, ctype, html = fetch(BASE + "/here-the-whole-time-2026/")
+    iframe = re.search(r'<iframe[^>]*data-src="([^"]+)"', html)
+    embed = iframe.group(1) if iframe else None
+    print(f"   film iframe: {embed}")
+    if embed:
+        code, ctype, raw = fetch(embed, referer=BASE + "/")
+        sub_items += extract_subtitles(raw)
+        video = extract_video_url(raw)
+        print(f"   film video: {video}")
+        if video:
+            sub_items += extract_m3u8_subtitles(video, embed)
+    unique_subs = {}
+    for lang, url in sub_items:
+        unique_subs.setdefault(url, lang)
+    print(f"   altyazi sayisi: {len(unique_subs)}")
+    for url, lang in list(unique_subs.items())[:5]:
+        print(f"   - [{lang}] {url}")
+    if unique_subs:
+        first_url = next(iter(unique_subs))
+        scode, stype, _ = fetch(first_url, referer=embed or BASE + "/")
+        print(f"   vtt kontrol -> HTTP {scode} type={stype}")
+        if scode != 200:
+            ok = False
+    else:
+        print("   ! altyazi cikarilamadi")
+        ok = False
 
     print()
     print("SONUC:", "BASARILI" if ok else "BASARISIZ")

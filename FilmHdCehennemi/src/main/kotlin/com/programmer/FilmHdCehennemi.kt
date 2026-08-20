@@ -251,12 +251,20 @@ class FilmHdCehennemi : MainAPI() {
         val document = app.get(data, interceptor = interceptor).document
         val iframeEl = document.selectFirst("iframe[data-src], iframe[src]") ?: return false
         val embedUrl = fixUrl(iframeEl.attr("data-src").ifBlank { iframeEl.attr("src") })
-        return resolveEmbed(embedUrl, data, callback)
+        return resolveEmbed(embedUrl, data, subtitleCallback, callback)
     }
 
-    private suspend fun resolveEmbed(embedUrl: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun resolveEmbed(
+        embedUrl: String,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         val page = app.get(embedUrl, referer = referer, interceptor = interceptor).text
         val decoded = decodePackers(page)
+
+        parseEmbedSubtitles(page, embedUrl, subtitleCallback)
+        parseEmbedSubtitles(decoded, embedUrl, subtitleCallback)
 
         for (assign in ASSIGN_REGEX.findAll(decoded)) {
             val fn = assign.groupValues[2]
@@ -267,6 +275,8 @@ class FilmHdCehennemi : MainAPI() {
             val fnBody = extractFunctionBody(decoded, fn) ?: continue
             val videoUrl = runEmbedDecode(chunks, fnBody) ?: continue
             if (!videoUrl.startsWith("http")) continue
+
+            parseM3u8Subtitles(videoUrl, embedUrl, subtitleCallback)
 
             callback.invoke(
                 newExtractorLink(
@@ -284,6 +294,40 @@ class FilmHdCehennemi : MainAPI() {
         }
 
         return runCatching { loadExtractor(embedUrl, mainUrl, {}, callback) }.getOrDefault(false)
+    }
+
+    // ---- Subtitle extraction ----
+
+    private suspend fun parseEmbedSubtitles(html: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit) {
+        val seen = HashSet<String>()
+        Regex(""""file"\s*:\s*"([^"]+\.vtt[^"]*)"[^}]*?"label"\s*:\s*"([^"]+)"""").findAll(html).forEach { m ->
+            val rawUrl = m.groupValues[1]
+            val lang = m.groupValues[2]
+            val url = rawUrl.replace("\\/", "/").replace("\\u0026", "&").replace("\\", "")
+            if (url.startsWith("http") && seen.add(url)) {
+                subtitleCallback.invoke(
+                    newSubtitleFile(lang = lang, url = url) {
+                        headers = mapOf("Referer" to referer)
+                    }
+                )
+            }
+        }
+    }
+
+    private suspend fun parseM3u8Subtitles(m3u8Url: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit) {
+        val body = runCatching { app.get(m3u8Url, referer = referer, interceptor = interceptor).text }
+            .getOrNull() ?: return
+        Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES[^#]*?URI="([^"]+)"[^#]*?LANGUAGE="([^"]+)"""").findAll(body).forEach { m ->
+            val lang = m.groupValues[2]
+            val rawUri = m.groupValues[1]
+            val url = if (rawUri.startsWith("http")) rawUri
+            else fixUrl("${m3u8Url.substringBeforeLast("/")}/$rawUri")
+            subtitleCallback.invoke(
+                newSubtitleFile(lang = lang, url = url) {
+                    headers = mapOf("Referer" to referer)
+                }
+            )
+        }
     }
 
     // ---- Embed (rapidrame) JS decoding ----
