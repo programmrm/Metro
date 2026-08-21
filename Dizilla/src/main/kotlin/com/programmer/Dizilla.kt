@@ -82,12 +82,20 @@ class Dizilla : MainAPI() {
     }
 
     private fun pickPoster(item: JsonNode): String? {
-        for (key in listOf("poster_url", "face_url", "back_url", "brand_url", "logo_url")) {
+        val candidates = mutableListOf<String>()
+        for (key in listOf("poster_url", "face_url", "back_url", "brand_url", "logo_url", "square_url", "poster", "image", "still_path")) {
             val url = item.get(key)?.asText() ?: continue
             if (url.endsWith("/")) continue
-            return url
+            candidates.add(url)
         }
-        return null
+        val direct = candidates.firstOrNull { it.contains("images.macellan.online") && !it.contains("cdn.ampproject.org") }
+        if (direct != null) return direct
+        val amp = candidates.firstOrNull { it.contains("cdn.ampproject.org") }
+        if (amp != null) {
+            return amp.replace("images-macellan-online.cdn.ampproject.org/i/s/images.macellan.online/", "images.macellan.online/")
+        }
+        return candidates.firstOrNull { !it.contains("file.macellan.online") }
+            ?: candidates.firstOrNull()
     }
 
     private fun extractItems(data: JsonNode, catKey: String): List<SearchResponse> {
@@ -171,7 +179,7 @@ class Dizilla : MainAPI() {
                 return resultArray.mapNotNull { item ->
                     val title = item.get("title")?.asText() ?: item.get("name")?.asText() ?: return@mapNotNull null
                     val slug = item.get("slug")?.asText() ?: item.get("used_slug")?.asText() ?: return@mapNotNull null
-                    val poster = item.get("poster")?.asText() ?: item.get("image")?.asText() ?: item.get("face_url")?.asText()
+                    val poster = pickPoster(item)
                     newTvSeriesSearchResponse(title, "$mainUrl/$slug", TvType.TvSeries) {
                         this.posterUrl = poster
                     }
@@ -185,7 +193,7 @@ class Dizilla : MainAPI() {
                     return innerResult.mapNotNull { item ->
                         val title = item.get("title")?.asText() ?: item.get("name")?.asText() ?: return@mapNotNull null
                         val slug = item.get("slug")?.asText() ?: item.get("used_slug")?.asText() ?: return@mapNotNull null
-                        val poster = item.get("poster")?.asText() ?: item.get("image")?.asText() ?: item.get("face_url")?.asText()
+                        val poster = pickPoster(item)
                         newTvSeriesSearchResponse(title, "$mainUrl/$slug", TvType.TvSeries) {
                             this.posterUrl = poster
                         }
@@ -201,7 +209,7 @@ class Dizilla : MainAPI() {
                     return r1.mapNotNull { item ->
                         val title = item.get("title")?.asText() ?: item.get("name")?.asText() ?: return@mapNotNull null
                         val slug = item.get("slug")?.asText() ?: item.get("used_slug")?.asText() ?: return@mapNotNull null
-                        val poster = item.get("poster")?.asText() ?: item.get("image")?.asText() ?: item.get("face_url")?.asText()
+                        val poster = pickPoster(item)
                         newTvSeriesSearchResponse(title, "$mainUrl/$slug", TvType.TvSeries) {
                             this.posterUrl = poster
                         }
@@ -214,7 +222,7 @@ class Dizilla : MainAPI() {
                         return r2.mapNotNull { item ->
                             val title = item.get("title")?.asText() ?: item.get("name")?.asText() ?: return@mapNotNull null
                             val slug = item.get("slug")?.asText() ?: item.get("used_slug")?.asText() ?: return@mapNotNull null
-                            val poster = item.get("poster")?.asText() ?: item.get("image")?.asText() ?: item.get("face_url")?.asText()
+                            val poster = pickPoster(item)
                             newTvSeriesSearchResponse(title, "$mainUrl/$slug", TvType.TvSeries) {
                                 this.posterUrl = poster
                             }
@@ -285,8 +293,7 @@ class Dizilla : MainAPI() {
                             val epHref = "$mainUrl/$epSlug"
                             val epEpisode = epNode.get("episode_no")?.asInt()
                                 ?: epNode.get("episode_number")?.asInt()
-                            val epPoster = epNode.get("still_path")?.asText()
-                                ?: epNode.get("poster")?.asText()
+                            val epPoster = pickPoster(epNode)
 
                             episodes.add(newEpisode(epHref) {
                                 this.name = epName
