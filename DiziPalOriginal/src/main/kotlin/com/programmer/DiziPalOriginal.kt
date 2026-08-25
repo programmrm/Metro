@@ -438,8 +438,7 @@ class DiziPalOriginal : MainAPI() {
             }
         )
 
-        // 4. AŞAMA: Altyazıları (Tracks) Yakala — VTT dosyaları Cloudflare korumalı
-        // olduğu için Referer ile indirip data URI olarak gönderiyoruz
+        // 4. AŞAMA: Altyazıları (Tracks) Yakala
         val tracksBlockMatch = Regex("""tracks\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL).find(embedSource)
 
         tracksBlockMatch?.groupValues?.getOrNull(1)?.let { tracksBlock ->
@@ -455,25 +454,15 @@ class DiziPalOriginal : MainAPI() {
                 val label = labelMatch?.groupValues?.getOrNull(1) ?: "Unknown"
 
                 if (fileUrl != null && (fileUrl.endsWith(".vtt") || fileUrl.endsWith(".srt"))) {
-                    val vttResponse = app.get(
-                        url = fileUrl,
-                        referer = embedUrl,
-                        headers = mapOf("User-Agent" to userAgent)
+                    subtitleCallback.invoke(
+                        newSubtitleFile(
+                            lang = label,
+                            url = fixUrl(fileUrl)
+                        ) {
+                            headers = mapOf("Referer" to embedUrl)
+                        }
                     )
-
-                    val vttText = vttResponse.text
-                    if (vttText.isNotBlank() && vttText.startsWith("WEBVTT")) {
-                        val base64Vtt = Base64.encodeToString(vttText.toByteArray(), Base64.NO_WRAP)
-                        subtitleCallback.invoke(
-                            SubtitleFile(
-                                lang = label,
-                                url = "data:text/vtt;base64,$base64Vtt"
-                            )
-                        )
-                        Log.d("DZP", "Altyazı indirildi ve eklendi » $label")
-                    } else {
-                        Log.e("DZP", "Altyazı dosyası yüklenemedi » $label ($fileUrl)")
-                    }
+                    Log.d("DZP", "Altyazı eklendi » $label")
                 }
             }
         }
