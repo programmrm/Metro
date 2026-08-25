@@ -2,6 +2,7 @@
 
 package com.programmer
 
+import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
@@ -269,33 +270,23 @@ class DiziPalOriginal : MainAPI() {
             return false
         }
 
-        val cookies = getResponse.cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
-
         Log.d("DZP", "Bulunan Token » $configToken")
-        Log.d("DZP", "Yakalanan Çerezler » $cookies")
 
-        // 2. AŞAMA: Token'ı API'ye Çerezlerle (Cookies) birlikte POST et
-        val configResponseRaw = app.post(
-            url = "$mainUrl/ajax-player-config",
-            headers = mapOf(
-                "User-Agent"       to userAgent,
-                "Accept"           to "*/*",
-                "Content-Type"     to "application/x-www-form-urlencoded",
-                "X-Requested-With" to "XMLHttpRequest",
-                "Origin"           to mainUrl,
-                "Cookie"           to cookies
-            ),
-            referer = data,
-            data = mapOf("cfg" to configToken)
-        ).text
+        // 2. AŞAMA: data-cfg base64 ile encode edilmiş JSON, doğrudan embed URL'sini içerir
+        val configJson = try {
+            String(Base64.decode(configToken, Base64.DEFAULT))
+        } catch (e: Exception) {
+            Log.e("DZP", "Base64 decode hatası: ${e.message}")
+            return false
+        }
 
-        Log.d("DZP", "API Yanıtı » $configResponseRaw")
+        Log.d("DZP", "Çözülen Config JSON » $configJson")
 
-        val embedUrlRaw = Regex(""""v"\s*:\s*"([^"]+)"""").find(configResponseRaw)?.groupValues?.getOrNull(1)
+        val embedUrlRaw = Regex(""""v"\s*:\s*"([^"]+)"""").find(configJson)?.groupValues?.getOrNull(1)
             ?.replace("\\/", "/")
 
         if (embedUrlRaw.isNullOrEmpty()) {
-            Log.e("DZP", "Embed URL config'den alınamadı! Dönen yanıt: $configResponseRaw")
+            Log.e("DZP", "Embed URL config JSON'dan çıkarılamadı! JSON: $configJson")
             return false
         }
 
