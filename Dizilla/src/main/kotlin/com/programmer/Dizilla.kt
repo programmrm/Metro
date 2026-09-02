@@ -12,10 +12,6 @@ import com.lagradost.cloudstream3.utils.*
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -135,97 +131,13 @@ class Dizilla : MainAPI() {
         return items
     }
 
-    private fun extractItemsWithDate(data: JsonNode, catKey: String): List<Pair<SearchResponse, Long>> {
-        val rawNode = data.get(catKey) ?: return emptyList()
-        val arr = when {
-            rawNode.isArray -> rawNode
-            rawNode.has("items") -> rawNode.get("items")
-            rawNode.has("result") -> rawNode.get("result")
-            else -> return emptyList()
-        }
-        if (!arr.isArray) return emptyList()
-
-        val items = mutableListOf<Pair<SearchResponse, Long>>()
-        val now = System.currentTimeMillis()
-
-        for (i in 0 until arr.size()) {
-            val item = arr.get(i) ?: continue
-            val slug = item.get("used_slug")?.asText()
-                ?: item.get("slug")?.asText()
-                ?: continue
-
-            val response = newTvSeriesSearchResponse(
-                item.get("original_title")?.asText()
-                    ?: item.get("culture_title")?.asText()
-                    ?: item.get("title")?.asText()
-                    ?: item.get("name")?.asText()
-                    ?: continue,
-                "$mainUrl/$slug",
-                TvType.TvSeries
-            ) {
-                this.posterUrl = pickPoster(item)
-            }
-
-            val dateStr = item.get("created_at")?.asText()
-                ?: item.get("updated_at")?.asText()
-                ?: item.get("date")?.asText()
-                ?: item.get("release_date")?.asText()
-                ?: item.get("air_date")?.asText()
-
-            val timestamp = parseDateToTimestamp(dateStr) ?: now
-            items.add(Pair(response, timestamp))
-        }
-        return items
-    }
-
-    private fun parseDateToTimestamp(dateStr: String?): Long? {
-        if (dateStr.isNullOrBlank()) return null
-        val formats = listOf(
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd'T'HH:mm:ss.SSS",
-            "yyyy-MM-dd HH:mm:ss",
-            "yyyy-MM-dd",
-            "dd/MM/yyyy",
-            "MM/dd/yyyy"
-        )
-        for (format in formats) {
-            try {
-                val sdf = SimpleDateFormat(format, Locale.getDefault())
-                val parsed = sdf.parse(dateStr)
-                if (parsed != null) return parsed.time
-            } catch (e: Exception) {
-                continue
-            }
-        }
-        return null
-    }
-
-    private fun filterByDaysAgo(items: List<Pair<SearchResponse, Long>>, daysAgo: Int): List<SearchResponse> {
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-
-        val startOfDay = cal.timeInMillis
-        val targetDayStart = startOfDay - (daysAgo * 24 * 60 * 60 * 1000L)
-        val targetDayEnd = targetDayStart + (24 * 60 * 60 * 1000L)
-
-        return items.filter { (_, timestamp) ->
-            timestamp in targetDayStart until targetDayEnd
-        }.map { it.first }
-    }
-
     override val mainPage = mainPageOf(
         "${mainUrl}/?page=1" to "Bugün Eklenen Bölümler",
-        "${mainUrl}/?page=2" to "Dün Eklenenler",
-        "${mainUrl}/?page=3" to "2 Gün Önce Eklenenler",
-        "${mainUrl}/?page=4" to "3 Gün Önce Eklenenler",
-        "${mainUrl}/?page=5" to "Güncel Bölümler",
-        "${mainUrl}/?page=6" to "Yeni Eklenenler",
-        "${mainUrl}/?page=7" to "Popüler",
-        "${mainUrl}/?page=8" to "Trend",
-        "${mainUrl}/?page=9" to "Yeni Bölümler"
+        "${mainUrl}/?page=2" to "Güncel Bölümler",
+        "${mainUrl}/?page=3" to "Yeni Eklenenler",
+        "${mainUrl}/?page=4" to "Popüler",
+        "${mainUrl}/?page=5" to "Trend",
+        "${mainUrl}/?page=6" to "Yeni Bölümler"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -234,28 +146,8 @@ class Dizilla : MainAPI() {
             val secureData = getSecureData() ?: return newHomePageResponse(request.name, emptyList())
             val data = decryptAndParse(secureData) ?: return newHomePageResponse(request.name, emptyList())
 
-            val dateFilteredCategories = listOf(
-                "Bugün Eklenen Bölümler",
-                "Dün Eklenenler",
-                "2 Gün Önce Eklenenler",
-                "3 Gün Önce Eklenenler"
-            )
-
-            if (request.name in dateFilteredCategories) {
-                val allItemsWithDate = extractItemsWithDate(data, "getEpisodesOnBrandAll")
-                val daysAgo = when (request.name) {
-                    "Bugün Eklenen Bölümler" -> 0
-                    "Dün Eklenenler" -> 1
-                    "2 Gün Önce Eklenenler" -> 2
-                    "3 Gün Önce Eklenenler" -> 3
-                    else -> 0
-                }
-                val filteredItems = filterByDaysAgo(allItemsWithDate, daysAgo)
-                Log.d("Dizilla", "${request.name}: ${filteredItems.size} items (filtered from ${allItemsWithDate.size})")
-                return newHomePageResponse(request.name, filteredItems)
-            }
-
             val catKey = when (request.name) {
+                "Bugün Eklenen Bölümler" -> "getEpisodesOnBrandAll"
                 "Güncel Bölümler" -> "getEpisodesOnBrandAll"
                 "Yeni Eklenenler" -> "getLastSeriesAll"
                 "Popüler" -> "allPopularSeries"
