@@ -99,8 +99,11 @@ class DiziBox : MainAPI() {
         val url      = request.data.replace("SAYFA", "$page")
         val document = req(url).document
         if (request.name == "Popüler Dizilerden Son Bölümler" || request.name == "Yeni Eklenen Bölümler") {
-            val home = document.select("article.article-episode-card").mapNotNull {
-                it.toEpisodeCardResult()
+            val seenSeries = mutableSetOf<String>()
+            val home = document.select("article.article-episode-card").mapNotNull { card ->
+                val seriesKey = card.episodeSeriesKey() ?: return@mapNotNull null
+                if (!seenSeries.add(seriesKey)) return@mapNotNull null
+                card.toEpisodeCardResult()
             }
             val hasNext = document.selectFirst("div.woca-pagination a.next") != null
             return newHomePageResponse(request.name, home, hasNext)
@@ -113,6 +116,17 @@ class DiziBox : MainAPI() {
             it.toMainPageResult()
         }
         return newHomePageResponse(request.name, home)
+    }
+
+    private fun Element.episodeSeriesKey(): String? {
+        this.selectFirst("b.series-name")?.text()?.trim()?.lowercase()?.let { if (it.isNotEmpty()) return it }
+        val title = this.selectFirst("a.episode-card-title")?.attr("title")?.trim().orEmpty()
+        if (title.isEmpty()) return null
+        return title
+            .replace(Regex("""\s+\d+\.?\s*Sezon\s+\d+\.?\s*Bölüm.*$""", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .lowercase()
+            .ifEmpty { title.lowercase() }
     }
 
     private fun Element.toEpisodeCardResult(): SearchResponse? {
