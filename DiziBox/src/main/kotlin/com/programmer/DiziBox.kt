@@ -122,7 +122,7 @@ class DiziBox : MainAPI() {
             .ifEmpty { link.text().trim() }
             .ifEmpty { return null }
         val posterUrl = fixUrlNull(
-            this.selectFirst("img")?.let { img ->
+            this.selectFirst("img.afis, a.figure-link img, figure a img[data-src]")?.let { img ->
                 img.attr("data-src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
                     ?: img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
             }
