@@ -1,58 +1,46 @@
-import hashlib, json, os
+import hashlib, json, os, re, zipfile
 
+ROOT = os.environ.get('GITHUB_WORKSPACE', '') + '/src'
 BUILDS = os.environ.get('GITHUB_WORKSPACE', '') + '/builds'
 
-plugins = [
-    {
-        'name': 'DiziBox', 'internalName': 'DiziBox', 'version': 24,
-        'description': 'DiziBox platformu.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%',
-        'tvTypes': ['TvSeries'], 'language': 'tr',
-        'authors': ['programmer'], 'status': 1
-    },
-    {
-        'name': 'Dizilla', 'internalName': 'Dizilla', 'version': 97,
-        'description': 'Dizilla platformu.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=dizillahd.com&sz=%size%',
-        'tvTypes': ['TvSeries'], 'language': 'tr',
-        'authors': ['programmer'], 'status': 1
-    },
-    {
-        'name': 'DiziPal', 'internalName': 'DiziPal', 'version': 91,
-        'description': 'DiziPal platformu.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=https://dizipal952.com&sz=%size%',
-        'tvTypes': ['TvSeries', 'Movie'], 'language': 'tr',
-        'authors': ['programmer', 'muratcesmecioglu'], 'status': 1
-    },
-    {
-        'name': 'DiziPalOriginal', 'internalName': 'DiziPalOriginal', 'version': 68,
-        'description': 'DiziPalOriginal platformu.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=https://dizipal2036.com&sz=%size%',
-        'tvTypes': ['TvSeries', 'Movie'], 'language': 'tr',
-        'authors': ['programmer', 'muratcesmecioglu'], 'status': 1
-    },
-    {
-        'name': 'DiziSt', 'internalName': 'DiziSt', 'version': 1,
-        'description': 'Dizist platformu.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=dizist.live&sz=%size%',
-        'tvTypes': ['TvSeries'], 'language': 'tr',
-        'authors': ['programmer'], 'status': 1
-    },
-    {
-        'name': 'DiziYabancıDizi', 'internalName': 'DiziYabancıDizi', 'version': 1,
-        'description': 'YabancıDizi platformu.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=yabancidizi.life&sz=%size%',
-        'tvTypes': ['TvSeries'], 'language': 'tr',
-        'authors': ['programmer'], 'status': 1
-    },
-    {
-        'name': 'FilmHdCehennemi', 'internalName': 'FilmHdCehennemi', 'version': 1,
-        'description': 'HDFilmCehennemi — en yeni filmleri ve yabancı dizileri full HD kalitede izleyin.',
-        'iconUrl': 'https://www.google.com/s2/favicons?domain=hdfilmcehennemi.nl&sz=%size%',
-        'tvTypes': ['Movie', 'TvSeries'], 'language': 'tr',
-        'authors': ['programmer'], 'status': 1
+def parse_list_of(text):
+    return re.findall(r'"([^"]+)"', text)
+
+def parse_build_gradle(path):
+    with open(path, encoding='utf-8') as f:
+        content = f.read()
+
+    version = int(re.search(r'version\s*=\s*(\d+)', content).group(1))
+    block = re.search(r'cloudstream\s*\{([\s\S]*?)\}', content).group(1)
+
+    def field(name):
+        m = re.search(name + r'\s*=\s*(.+)', block)
+        return m.group(1).strip() if m else ''
+
+    return {
+        'version': version,
+        'authors': parse_list_of(field('authors')) or ['programmer'],
+        'language': (field('language').strip('"') or 'tr'),
+        'description': field('description').strip().strip('"'),
+        'status': int(re.search(r'(\d+)', field('status')).group(1)) if field('status') else 1,
+        'tvTypes': parse_list_of(field('tvTypes')) or ['Movie'],
+        'iconUrl': field('iconUrl').strip().strip('"'),
     }
-]
+
+plugins = []
+if os.path.isdir(ROOT):
+    for name in sorted(os.listdir(ROOT)):
+        gradle = os.path.join(ROOT, name, 'build.gradle.kts')
+        if not os.path.isfile(gradle):
+            continue
+        try:
+            meta = parse_build_gradle(gradle)
+        except Exception as e:
+            print(f'UYARI: {name} build.gradle.kts okunamadi: {e}')
+            continue
+        meta['name'] = name
+        meta['internalName'] = name
+        plugins.append(meta)
 
 result = []
 for p in plugins:
@@ -61,13 +49,26 @@ for p in plugins:
     if not os.path.exists(path):
         print('UYARI: ' + cs3 + ' bulunamadi, atlaniyor')
         continue
+
+    # .cs3 manifest.json icindeki version tercih edilir
+    version = p['version']
+    try:
+        with zipfile.ZipFile(path) as z:
+            manifest = json.loads(z.read('manifest.json'))
+            if 'version' in manifest:
+                version = int(manifest['version'])
+            if manifest.get('name'):
+                p['name'] = manifest['name']
+    except Exception:
+        pass
+
     with open(path, 'rb') as f:
         h = hashlib.sha256(f.read()).hexdigest()
     size = os.path.getsize(path)
     entry = {
         'url': 'https://raw.githubusercontent.com/programmrm/Metro/builds/' + cs3,
         'status': p['status'],
-        'version': p['version'],
+        'version': version,
         'name': p['name'],
         'internalName': p['internalName'],
         'authors': p['authors'],
