@@ -65,7 +65,9 @@ class DiziBox : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/ulke/turkiye"               to "Yerli",
+        "${mainUrl}/tum-bolumler/page/SAYFA/?tip=populer" to "Popüler Dizilerden Son Bölümler",
+        "${mainUrl}/tum-bolumler/page/SAYFA/"              to "Yeni Eklenen Bölümler",
+        "${mainUrl}/ulke/turkiye"                          to "Yerli",
         "${mainUrl}/dizi-arsivi/page/SAYFA/"    to "Dizi Arşivi",
         "${mainUrl}/tur/aile/page/SAYFA/"       to "Aile",
         "${mainUrl}/tur/aksiyon/page/SAYFA"     to "Aksiyon",
@@ -96,6 +98,13 @@ class DiziBox : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url      = request.data.replace("SAYFA", "$page")
         val document = req(url).document
+        if (request.name == "Popüler Dizilerden Son Bölümler" || request.name == "Yeni Eklenen Bölümler") {
+            val home = document.select("article.article-episode-card").mapNotNull {
+                it.toEpisodeCardResult()
+            }
+            val hasNext = document.selectFirst("div.woca-pagination a.next") != null
+            return newHomePageResponse(request.name, home, hasNext)
+        }
         if (request.name == "Dizi Arşivi") {
             val home = document.select("article.detailed-article").mapNotNull { it.toMainPageResult() }
             return newHomePageResponse(request.name, home)
@@ -104,6 +113,23 @@ class DiziBox : MainAPI() {
             it.toMainPageResult()
         }
         return newHomePageResponse(request.name, home)
+    }
+
+    private fun Element.toEpisodeCardResult(): SearchResponse? {
+        val link = this.selectFirst("a.episode-card-title") ?: return null
+        val href = fixUrlNull(link.attr("href")) ?: return null
+        val title = link.attr("title").trim()
+            .ifEmpty { link.text().trim() }
+            .ifEmpty { return null }
+        val posterUrl = fixUrlNull(
+            this.selectFirst("img")?.let { img ->
+                img.attr("data-src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                    ?: img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+            }
+        )
+        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+            this.posterUrl = posterUrl
+        }
     }
 
     private fun Element.toMainPageResult(): SearchResponse? {
@@ -125,8 +151,22 @@ class DiziBox : MainAPI() {
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    override suspend fun load(url: String): LoadResponse? {
+    override suspend fun load(url: String): LoadResponse? = loadInternal(url, allowSeriesRedirect = true)
+
+    private suspend fun loadInternal(url: String, allowSeriesRedirect: Boolean): LoadResponse? {
         val document = req(url).document
+
+        // Bölüm sayfasındaysak (Yeni Eklenen Bölümler) dizi sayfasına yönlendir
+        if (document.selectFirst("div#seasons-list") == null) {
+            if (allowSeriesRedirect) {
+                val seriesUrl = fixUrlNull(document.selectFirst("a.archive-title")?.attr("href"))
+                    ?: fixUrlNull(document.selectFirst("#archive-box a.figure")?.attr("href"))
+                if (seriesUrl != null && seriesUrl != url) {
+                    return loadInternal(seriesUrl, allowSeriesRedirect = false)
+                }
+            }
+            return loadEpisodeAsSeries(url, document)
+        }
 
         val title       = document.selectFirst("div.tv-overview h1 a")?.text()?.trim() ?: return null
         val poster      = fixUrlNull(document.selectFirst("div.tv-overview figure img")?.attr("src"))
@@ -162,6 +202,30 @@ class DiziBox : MainAPI() {
             this.tags      = tags
             addActors(actors)
             addTrailer(trailer)
+        }
+    }
+
+    private suspend fun loadEpisodeAsSeries(url: String, document: org.jsoup.nodes.Document): LoadResponse? {
+        val seriesName = document.selectFirst("span.tv-title-archive span[itemprop=name]")?.text()?.trim()
+            ?: document.selectFirst("h1 span.tv-title-archive")?.text()?.trim()
+            ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.substringBefore(" 1.")?.trim()
+            ?: return null
+        val episodeTitle = document.selectFirst("span.tv-title-episode")?.text()?.trim()
+        val title = if (episodeTitle != null) "$seriesName $episodeTitle" else seriesName
+        val poster = fixUrlNull(document.selectFirst("meta[property=og:image]")?.attr("content"))
+        val description = fixUrlNull(document.selectFirst("meta[property=og:description]")?.attr("content"))
+        val season = Regex("""(\d+)\. ?Sezon""").find(episodeTitle ?: "")?.groupValues?.get(1)?.toIntOrNull() ?: 1
+        val episode = Regex("""(\d+)\. ?Bölüm""").find(episodeTitle ?: "")?.groupValues?.get(1)?.toIntOrNull()
+
+        val episodes = listOf(newEpisode(url) {
+            this.name = episodeTitle ?: title
+            this.season = season
+            this.episode = episode
+        })
+
+        return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+            this.posterUrl = poster
+            this.plot = description
         }
     }
 
