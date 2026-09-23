@@ -33,8 +33,11 @@ class FilmHdCehennemi : MainAPI() {
         override fun intercept(chain: Interceptor.Chain): Response {
             val request  = chain.request()
             val response = chain.proceed(request)
-            val doc = org.jsoup.Jsoup.parse(response.peekBody(10 * 1024).string())
-            if (response.code == 503 || doc.selectFirst("meta[name='cloudflare']") != null) {
+            val body = runCatching { response.peekBody(256 * 1024).string() }.getOrDefault("")
+            if (response.code in listOf(403, 429, 503) ||
+                body.contains("Just a moment", ignoreCase = true) ||
+                Jsoup.parse(body).selectFirst("meta[name='cloudflare']") != null
+            ) {
                 return cloudflareKiller.intercept(chain)
             }
             return response
@@ -251,7 +254,10 @@ class FilmHdCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data, interceptor = interceptor).document
-        val iframeEl = document.selectFirst("iframe[data-src], iframe[src]") ?: return false
+        val iframeEl = document.selectFirst(
+            "iframe[data-src*='/video/embed/'], iframe[src*='/video/embed/'], " +
+                "iframe.close[data-src], iframe.close[src], iframe[data-src], iframe[src]"
+        ) ?: return false
         val embedUrl = fixUrl(iframeEl.attr("data-src").ifBlank { iframeEl.attr("src") })
         return resolveEmbed(embedUrl, data, subtitleCallback, callback)
     }
@@ -263,11 +269,38 @@ class FilmHdCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val page = app.get(embedUrl, referer = referer, interceptor = interceptor).text
-        val decoded = decodePackers(page)
 
         parseEmbedSubtitles(page, embedUrl, subtitleCallback)
-        parseEmbedSubtitles(decoded, embedUrl, subtitleCallback)
 
+        val videoUrl = decodeSourcesUrl(page)
+            ?: runLegacyAssignDecode(page)
+
+        if (videoUrl == null || !videoUrl.startsWith("http")) {
+            return runCatching { loadExtractor(embedUrl, referer, {}, callback) }.getOrDefault(false)
+        }
+
+        parseM3u8Subtitles(videoUrl, embedUrl, subtitleCallback)
+
+        callback.invoke(
+            newExtractorLink(
+                source = this.name,
+                name = this.name,
+                url = videoUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = embedUrl
+                this.quality = -1
+                headers = mapOf(
+                    "Referer" to embedUrl,
+                    "Origin" to "https://hdfilmcehennemi.mobi",
+                )
+            }
+        )
+        return true
+    }
+
+    private fun runLegacyAssignDecode(page: String): String? {
+        val decoded = decodePackers(page)
         for (assign in ASSIGN_REGEX.findAll(decoded)) {
             val fn = assign.groupValues[2]
             val chunkStr = assign.groupValues[3]
@@ -276,26 +309,144 @@ class FilmHdCehennemi : MainAPI() {
             if (chunks.isEmpty()) continue
             val fnBody = extractFunctionBody(decoded, fn) ?: continue
             val videoUrl = runEmbedDecode(chunks, fnBody) ?: continue
-            if (!videoUrl.startsWith("http")) continue
+            if (videoUrl.startsWith("http")) return videoUrl
+        }
+        return null
+    }
 
-            parseM3u8Subtitles(videoUrl, embedUrl, subtitleCallback)
+    /** sources: [{file: VAR}] -> var VAR = fn("...".split("sep")) */
+    private fun decodeSourcesUrl(html: String): String? {
+        val fileVar = Regex("""sources:\s*\[\{\s*file:\s*(\w+)""").find(html)?.groupValues?.get(1)
+            ?: return null
+        val call = Regex("""var\s+${Regex.escape(fileVar)}\s*=\s*(\w+)\s*\(""").find(html)
+            ?: return null
+        val fnName = call.groupValues[1]
+        val rest = html.substring(call.range.last + 1)
+        val arg = Regex("""^"([^"]*)"\s*\.split\(\s*['"]([^'"])['"]\s*\)""").find(rest)
+            ?: return null
+        val parts = arg.groupValues[1].split(arg.groupValues[2])
+        val body = extractFunctionBody(html, fnName) ?: return null
+        return runCatching { decodeStage2(parts, body) }.getOrNull()
+    }
 
-            callback.invoke(
-                newExtractorLink(
-                    source = this.name,
-                    name = this.name,
-                    url = videoUrl,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    this.referer = embedUrl
-                    this.quality = -1
-                    headers = mapOf("Referer" to embedUrl)
-                }
-            )
-            return true
+    private fun decodeStage2(parts0: List<String>, body: String): String? {
+        val parts = parts0.toMutableList()
+        val n = parts.size - 2
+        if (n < 0) return null
+        val de9 = 8 + (n % 5)
+        val th5i = n % 7
+        if (de9 !in parts.indices) return null
+        val opStr = parts.removeAt(de9)
+        if (th5i !in parts.indices) return null
+        val hashStr = parts.removeAt(th5i)
+        var data = parts.joinToString("")
+
+        val pair = Regex("""var\s+(\w+)\s*=\s*\w+\.splice\([^)]+\)\s*\[0\]\s*,\s*(?:var\s+)?(\w+)\s*=\s*\w+\.splice""")
+            .find(body)
+        val opVar = pair?.groupValues?.get(1)
+            ?: Regex("""var\s+(\w+)\s*=\s*\w+\.splice""").find(body)?.groupValues?.get(1)
+            ?: return null
+        val hashVar = pair?.groupValues?.get(2)
+            ?: Regex(""",\s*(?:var\s+)?(\w+)\s*=\s*\w+\.splice""").find(body)?.groupValues?.get(1)
+            ?: return null
+
+        data class Check(val pos: Int, val vref: String, val thr: Int, val target: String, val expr: String)
+        val checks = Regex("""if\s*\(\s*(\w+)\.length\s*>\s*(\d+)\s*\)\s*\{\s*(\w+)\s*=\s*([^;]+);?\s*\}""")
+            .findAll(body).map {
+                Check(
+                    it.range.first,
+                    it.groupValues[1],
+                    it.groupValues[2].toIntOrNull() ?: 0,
+                    it.groupValues[3],
+                    it.groupValues[4].trim()
+                )
+            }.toList()
+        val loopPos = Regex("""for\s*\(\s*\w+\s*=\s*${Regex.escape(opVar)}\.length\s*-\s*1""")
+            .find(body)?.range?.first ?: body.length
+        val dataVar = Regex("""var\s+(\w+)\s*=\s*\w+\.join\(\s*''\s*\)""")
+            .find(body)?.groupValues?.get(1) ?: return null
+
+        fun refLen(vref: String): Int = when (vref) {
+            opVar -> opStr.length
+            hashVar -> hashStr.length
+            else -> 0
         }
 
-        return runCatching { loadExtractor(embedUrl, mainUrl, {}, callback) }.getOrDefault(false)
+        fun applyExpr(expr: String, cur: String): String? = when {
+            expr.startsWith("atob") -> b64Binary(cur)
+            expr.contains("reverse") -> cur.reversed()
+            expr.contains("replace") && expr.contains("'0'") ->
+                cur.map { if (it.isLetter()) '0' else it }.joinToString("")
+            else -> null
+        }
+
+        for (c in checks.sortedBy { it.pos }) {
+            if (c.pos >= loopPos || c.target != dataVar) continue
+            if (refLen(c.vref) > c.thr) {
+                data = applyExpr(c.expr, data) ?: continue
+            }
+        }
+
+        var h = 0
+        var x = 0
+        for (i in hashStr.indices) {
+            val e = hashStr[i].code
+            h = (h * 37 + e) % 241
+            x = (x + ((e shl 1) xor i)) and 255
+        }
+        val xorSeed = (h * 3 + x) % 256
+        val xorStep = (x % 11) + 5
+        var fy = ((x * 251 + h) % 65519) + 1
+
+        for (i in opStr.length - 1 downTo 0) {
+            when (val ch = opStr[i]) {
+                '7' -> data = b64Binary(data) ?: return null
+                '3' -> data = data.reversed()
+                else -> {
+                    val shift = (26 - ((ch.code - 96) % 26)) % 26
+                    data = rotLetters(data, shift)
+                }
+            }
+        }
+
+        for (c in checks.sortedBy { it.pos }) {
+            if (c.pos <= loopPos || c.target != dataVar) continue
+            val ref = refLen(c.vref).takeIf { it > 0 } ?: data.length
+            if (ref > c.thr) {
+                data = applyExpr(c.expr, data) ?: continue
+            }
+        }
+
+        val len = data.length
+        val tbl = IntArray(len)
+        for (b in len - 1 downTo 1) {
+            fy = (fy * 97 + 41) % 65519
+            tbl[b] = fy % (b + 1)
+        }
+        val arr = data.toCharArray()
+        for (b in 1 until len) {
+            val j = tbl[b]
+            val t = arr[b]; arr[b] = arr[j]; arr[j] = t
+        }
+        data = String(arr)
+
+        val sb = StringBuilder(data.length)
+        var acc = xorSeed
+        for (ch in data) {
+            val e = ch.code
+            acc = (acc * 5 + xorStep) % 256
+            sb.append((e xor acc).toChar())
+            acc = (acc + e) % 256
+        }
+        return sb.toString().takeIf { it.startsWith("http") }
+    }
+
+    private fun b64Binary(s: String): String? {
+        val clean = s.replace('-', '+').replace('_', '/')
+        val pad = (4 - clean.length % 4) % 4
+        return runCatching {
+            String(Base64.decode(clean + "=".repeat(pad), Base64.DEFAULT), Charsets.ISO_8859_1)
+        }.getOrNull()
     }
 
     // ---- Subtitle extraction ----
@@ -335,8 +486,10 @@ class FilmHdCehennemi : MainAPI() {
     // ---- Embed (rapidrame) JS decoding ----
 
     private fun extractFunctionBody(js: String, fn: String): String? {
-        val m = Regex("function\\s+$fn\\s*\\(").find(js) ?: return null
-        val openIdx = js.indexOf('{', m.range.last) ?: return null
+        val m = Regex("""(?:function\s+${Regex.escape(fn)}\s*\(|var\s+${Regex.escape(fn)}\s*=\s*function\s*\()""")
+            .find(js) ?: return null
+        val openIdx = js.indexOf('{', m.range.last)
+        if (openIdx < 0) return null
         var depth = 0
         var closeIdx = -1
         for (j in openIdx until js.length) {
@@ -349,7 +502,7 @@ class FilmHdCehennemi : MainAPI() {
             }
         }
         if (closeIdx == -1) return null
-        return js.substring(openIdx + 1, closeIdx)
+        return js.substring(openIdx, closeIdx + 1)
     }
 
     private fun runEmbedDecode(chunks: List<String>, fnBody: String): String? {
