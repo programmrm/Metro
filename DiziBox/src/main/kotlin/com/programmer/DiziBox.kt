@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
 import java.net.URLEncoder
+import java.text.Normalizer
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
@@ -181,9 +182,89 @@ class DiziBox : MainAPI() {
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
     }
 
+    /**
+     * Sitenin kendi araması (`/?s=` ve `admin-ajax.php?action=dwls_search`)
+     * kaynakta takılıp hiç yanıt vermiyor (000/520). Bunun yerine
+     * /dizi-arsivi/ sayfasındaki alfabetik diziden (~4800 dizi) yerelde arıyoruz.
+     */
+    private data class SeriesEntry(val title: String, val url: String)
+
+    private val whitespaceRegex = Regex("""\s+""")
+    private val combiningRegex  = Regex("""\p{M}+""")
+    private val indexTtlMs      = 30 * 60 * 1000L
+
+    @Volatile private var cachedIndex: List<SeriesEntry>? = null
+    @Volatile private var cachedIndexAt = 0L
+
+    private fun Element.toSeriesEntry(): SeriesEntry? {
+        val href = fixUrlNull(this.attr("href")) ?: return null
+        val title = this.attr("title").removeSuffix(" izle").trim()
+            .ifEmpty { this.text().trim() }
+            .ifEmpty { return null }
+        return SeriesEntry(title, href)
+    }
+
+    private suspend fun seriesIndex(): List<SeriesEntry> {
+        val cached = cachedIndex
+        if (cached != null && System.currentTimeMillis() - cachedIndexAt < indexTtlMs) return cached
+
+        val entries = try {
+            val doc = req("${mainUrl}/dizi-arsivi/").document
+            // alfabetik dizin + sayfadaki en yeni kartlar (dizin yeni eklenen dizileri her zaman içermiyor)
+            val fromLists = doc.select("ul.alphabetical-category-list > li > a[href]").mapNotNull { it.toSeriesEntry() }
+            val fromCards = doc.select("article.detailed-article h3 a[href]").mapNotNull { it.toSeriesEntry() }
+            (fromLists + fromCards).distinctBy { it.url }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        if (entries.isNotEmpty()) {
+            cachedIndex   = entries
+            cachedIndexAt = System.currentTimeMillis()
+        }
+        return entries.ifEmpty { cached ?: emptyList() }
+    }
+
+    /** Türkçe/aksanlı karakterleri katlar: "Tanıyorum" -> "taniyorum", "círculo" -> "circulo" */
+    private fun foldText(text: String): String =
+        Normalizer.normalize(text.lowercase(), Normalizer.Form.NFD)
+            .replace(combiningRegex, "")
+            .replace('ı', 'i')
+
+    private fun filterSeries(index: List<SeriesEntry>, query: String): List<SearchResponse> {
+        val needle = foldText(query.trim().replace(whitespaceRegex, " "))
+        if (needle.isEmpty() || index.isEmpty()) return emptyList()
+
+        return index
+            .filter { foldText(it.title).contains(needle) }
+            .sortedByDescending { foldText(it.title).startsWith(needle) }
+            .take(50)
+            .map { newTvSeriesSearchResponse(it.title, it.url, TvType.TvSeries) }
+    }
+
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = req("${mainUrl}/?s=$query").document
-        return document.select("article.detailed-article").mapNotNull { it.toMainPageResult() }
+        // Site araması afişli kartlar döndürür ama sadece ASCII sorgularda çalışır;
+        // yerel dizin her sorguda (Türkçe dahil) çalışır ama afişi yoktur.
+        val remote = try { searchOnSite(query) } catch (e: Exception) { emptyList() }
+        val local  = try { filterSeries(seriesIndex(), query) } catch (e: Exception) { emptyList() }
+
+        if (remote.isEmpty()) return local
+        if (local.isEmpty())  return remote
+
+        val merged = LinkedHashMap<String, SearchResponse>()
+        remote.forEach { merged.putIfAbsent(it.url, it) }
+        local.forEach  { merged.putIfAbsent(it.url, it) }
+        return merged.values.take(50)
+    }
+
+    /** Site'nin /search/<q>/ uç noktası — sadece ASCII sorgular (CF non-ASCII istekte 403 dönüyor). */
+    private suspend fun searchOnSite(query: String): List<SearchResponse> {
+        val q = query.trim().replace(whitespaceRegex, "+")
+        if (q.isEmpty() || q.any { it.code > 127 }) return emptyList()
+
+        return req("${mainUrl}/search/$q/").document
+            .select("article.detailed-article")
+            .mapNotNull { it.toMainPageResult() }
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
