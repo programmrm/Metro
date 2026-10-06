@@ -428,23 +428,31 @@ class Dizilla : MainAPI() {
             Log.d("Dizilla", "iframe: $iframe")
 
             // Altyazıları doğrudan iframe sayfasından da çek (ekstraktor bulamasa dahi çalışır)
+            // Altyazı CDN'i hem Referer hem User-Agent ister; biri eksikse 403 döner.
+            // Header'lar FourPichive/ContentX ile birebir aynı → oyuncuda tek kayıt olarak birleşir.
             try {
                 val iframeDoc = app.get(iframe, referer = "${mainUrl}/").text
                 val subUrls = mutableSetOf<String>()
+                val subHeaders = mapOf(
+                    "Referer" to iframe,
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                )
 
-                fun addSub(file: String, label: String) {
+                suspend fun addSub(file: String, label: String) {
                     val cleanUrl = file.replace("\\/", "/").replace("\\", "")
                     if (cleanUrl in subUrls) return
                     subUrls.add(cleanUrl)
                     subtitleCallback.invoke(
-                        SubtitleFile(
+                        newSubtitleFile(
                             lang = label
                                 .replace("\\u0131", "ı").replace("\\u0130", "İ")
                                 .replace("\\u00fc", "ü").replace("\\u00e7", "ç")
                                 .replace("\\u011f", "ğ").replace("\\u015f", "ş")
                                 .replace("\\u00f6", "ö").replace("\\u00f6", "ö"),
                             url = fixUrl(cleanUrl)
-                        )
+                        ) {
+                            headers = subHeaders
+                        }
                     )
                 }
 
