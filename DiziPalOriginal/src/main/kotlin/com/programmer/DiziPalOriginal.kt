@@ -7,6 +7,9 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class DiziPalOriginal : MainAPI() {
     override var mainUrl              = "https://dizipal2136.com"
@@ -36,7 +39,7 @@ class DiziPalOriginal : MainAPI() {
         "${mainUrl}/kategori/bilim-kurgu"                          to "Bilimkurgu Filmleri",
         "${mainUrl}/kategori/komedi"                               to "Komedi Filmleri",
         "${mainUrl}/kategori/belgesel"                             to "Belgesel Filmleri",
-        "${mainUrl}/api/content.php?type=dizi&page=1&genre=Aile&year=&sort=newest"  to "Aile Dizileri",
+        "${mainUrl}/diziler?kelime=&durum=&tur=1&type=&siralama="              to "Aile Dizileri",
         //"${mainUrl}/diziler?kelime=&durum=&tur=4&type=&siralama="  to "Belgesel Dizileri",
         //"${mainUrl}/diziler?kelime=&durum=&tur=11&type=&siralama=" to "Komedi Dizileri",
         //"${mainUrl}/diziler?kelime=&durum=&tur=26&type=&siralama=" to "Anime",
@@ -82,15 +85,13 @@ class DiziPalOriginal : MainAPI() {
         val episode   = this.selectFirst(".ep-info")?.text()?.trim()?.replace(". Sezon ", "x")?.replace(". Bölüm", "") ?: return null
         val title     = "$name $episode"
 
+        // Bölüm linkini olduğu gibi veriyoruz: slug'lar dizinin slug'ı ile aynı olmayabiliyor
+        // (ör. habilidad-fisica-100-mexico -> physical-100-mexico), load() bunu diziye çeviriyor.
         val href      = fixUrlNull(this.attr("href")) ?: return null
         val imgElement = this.selectFirst("img")
         val posterUrl = fixUrlNull(imgElement?.attr("data-src")?.ifEmpty { imgElement.attr("src") })
 
-        val seriesUrl = href
-            .replace(Regex("-\\d+-sezon-\\d+-bolum.*$"), "") // Sonundaki sezon-bölüm tagini at
-            .replace("/bolum/", "/dizi/")
-
-        return newTvSeriesSearchResponse(title, seriesUrl, TvType.TvSeries) {
+        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
             this.posterUrl = posterUrl
         }
     }
@@ -134,8 +135,13 @@ class DiziPalOriginal : MainAPI() {
             referer = "$mainUrl/"
         )
 
-        // JSON'ı yeni data class yapımızla parse ediyoruz
-        val jsonResponse = AppUtils.parseJson<DizipalSearchData>(responseRaw.text)
+        // JSON'ı yeni data class yapımızla parse ediyoruz (CF/bozuk yanıt gelirse çökmesin)
+        val jsonResponse = try {
+            AppUtils.parseJson<DizipalSearchData>(responseRaw.text)
+        } catch (e: Exception) {
+            Log.e("DZP", "Arama yanıtı parse edilemedi: ${e.message}")
+            return emptyList()
+        }
 
         val searchResponses = mutableListOf<SearchResponse>()
 
@@ -169,10 +175,21 @@ class DiziPalOriginal : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun load(url: String): LoadResponse? {
-    // 1. BÖLÜM LİNKİ YÖNLENDİRMESİ
+    // 1. BÖLÜM LİNKİ YÖNLENDİRMESİ (Son Bölümler kartları)
+    // Bölüm slug'ı dizi slug'ı ile aynı olmayabiliyor, bu yüzden gerçek dizi
+    // bağlantısını bölüm sayfasındaki "Tüm Bölümler" butonundan alıyoruz.
     if (url.contains("/bolum/")) {
-        val seriesUrl = url.replace("/bolum/", "/dizi/")
-            .replace(Regex("-\\d+-sezon.*"), "")
+        val episodeDocument = try {
+            app.get(url).document
+        } catch (e: Exception) {
+            Log.e("DZP", "Bölüm sayfası alınamadı: ${e.message}")
+            return null
+        }
+
+        val seriesUrl = fixUrlNull(episodeDocument.selectFirst("a.btn-watch-first, a.ep-nav-all")?.attr("href"))
+            ?: url.replace("/bolum/", "/dizi/").replace(Regex("-\\d+-sezon.*"), "")
+
+        if (seriesUrl == url || seriesUrl.contains("/bolum/")) return null
         return load(seriesUrl)
     }
 
@@ -242,6 +259,108 @@ class DiziPalOriginal : MainAPI() {
     }
 }
 
+    /**
+     * Bölüm sayfasındaki data-cfg kısa ömürlü bir nonce'tur (base64 JSON değil).
+     * /ajax-player-config ucuna gönderilir; yanıt {config:{...}, enc:{k1,k2,iv,c}} şeklindedir,
+     * embed URL enc alanında AES-256-CBC ile şifreli gelir (anahtar = k1 XOR k2).
+     * Token kısa sürede ölebiliyor, bu yüzden taze sayfa ile 2 deneme yapıyoruz.
+     */
+    private suspend fun fetchEmbedUrl(episodeUrl: String, userAgent: String): String? {
+        for (attempt in 1..2) {
+            try {
+                val getResponse = app.get(
+                    url = episodeUrl,
+                    headers = mapOf(
+                        "User-Agent"    to userAgent,
+                        "Cache-Control" to "no-cache",
+                        "Pragma"        to "no-cache"
+                    )
+                )
+
+                val configToken = getResponse.document
+                    .selectFirst("#videoContainer")?.attr("data-cfg")?.trim()
+
+                if (configToken.isNullOrEmpty()) {
+                    Log.e("DZP", "Sayfadan video config token'ı (data-cfg) alınamadı! (deneme $attempt)")
+                    continue
+                }
+
+                Log.d("DZP", "Bulunan Token » $configToken")
+
+                val responseText = app.post(
+                    url     = "${mainUrl}/ajax-player-config",
+                    data    = mapOf("cfg" to configToken),
+                    headers = mapOf(
+                        "User-Agent"       to userAgent,
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "Accept"           to "*/*"
+                    ),
+                    referer = episodeUrl,
+                    cookies = getResponse.cookies
+                ).text
+
+                val config = try {
+                    AppUtils.parseJson<DizipalPlayerConfigResponse>(responseText)
+                } catch (e: Exception) {
+                    Log.e("DZP", "player-config JSON parse hatası: ${e.message} » $responseText")
+                    continue
+                }
+
+                if (config.success != true) {
+                    Log.e("DZP", "player-config başarısız (deneme $attempt) » $responseText")
+                    continue
+                }
+
+                // Sitenin kendisinde video yoksa tekrar denemeye gerek yok
+                if (config.config?.t == "none") {
+                    Log.e("DZP", "Bu içerikte sitede video yok » $responseText")
+                    return null
+                }
+
+                // Şifresiz geldiyse doğrudan kullan, değilse enc alanını AES ile çöz
+                val embed = config.config?.v?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: config.enc?.let { decryptConfig(it) }
+
+                if (!embed.isNullOrEmpty()) {
+                    return embed
+                }
+
+                Log.e("DZP", "Embed URL boş geldi (deneme $attempt) » $responseText")
+            } catch (e: Exception) {
+                Log.e("DZP", "player-config hatası (deneme $attempt): ${e.message}")
+            }
+        }
+        return null
+    }
+
+    /** enc alanındaki AES-256-CBC şifresini çözer: anahtar = base64(k1) XOR base64(k2) */
+    private fun decryptConfig(enc: DizipalPlayerEnc): String? {
+        val key1Raw = enc.k1 ?: return null
+        val key2Raw = enc.k2 ?: return null
+        val ivRaw   = enc.iv ?: return null
+        val dataRaw = enc.c  ?: return null
+
+        return try {
+            val key1     = Base64.decode(key1Raw, Base64.DEFAULT)
+            val key2     = Base64.decode(key2Raw, Base64.DEFAULT)
+            val xorKey   = ByteArray(minOf(key1.size, key2.size)) { i -> (key1[i].toInt() xor key2[i].toInt()).toByte() }
+            val ivBytes  = Base64.decode(ivRaw,   Base64.DEFAULT)
+            val cipherIn = Base64.decode(dataRaw, Base64.DEFAULT)
+
+            val cipher = try {
+                Cipher.getInstance("AES/CBC/PKCS7Padding") // Android
+            } catch (e: Exception) {
+                Cipher.getInstance("AES/CBC/PKCS5Padding") // JVM (masaüstü)
+            }
+
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(xorKey, "AES"), IvParameterSpec(ivBytes))
+            String(cipher.doFinal(cipherIn), Charsets.UTF_8).trim()
+        } catch (e: Exception) {
+            Log.e("DZP", "AES çözümleme hatası: ${e.message}")
+            null
+        }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -252,41 +371,12 @@ class DiziPalOriginal : MainAPI() {
 
         val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
-        // 1. AŞAMA: GET isteği atıp hem Token'ı hem de ÇEREZLERİ alıyoruz
-        val getResponse = app.get(
-            url = data,
-            headers = mapOf(
-                "User-Agent"    to userAgent,
-                "Cache-Control" to "no-cache",
-                "Pragma"        to "no-cache"
-            )
-        )
-
-        val document = getResponse.document
-        val configToken = document.selectFirst("#videoContainer")?.attr("data-cfg")?.trim()
-
-        if (configToken.isNullOrEmpty()) {
-            Log.e("DZP", "Sayfadan video config token'ı (data-cfg) alınamadı!")
-            return false
-        }
-
-        Log.d("DZP", "Bulunan Token » $configToken")
-
-        // 2. AŞAMA: data-cfg base64 ile encode edilmiş JSON, doğrudan embed URL'sini içerir
-        val configJson = try {
-            String(Base64.decode(configToken, Base64.DEFAULT))
-        } catch (e: Exception) {
-            Log.e("DZP", "Base64 decode hatası: ${e.message}")
-            return false
-        }
-
-        Log.d("DZP", "Çözülen Config JSON » $configJson")
-
-        val embedUrlRaw = Regex(""""v"\s*:\s*"([^"]+)"""").find(configJson)?.groupValues?.getOrNull(1)
-            ?.replace("\\/", "/")
+        // 1-2. AŞAMA: data-cfg kısa ömürlü bir nonce'tur (base64 JSON değil),
+        // /ajax-player-config'e gönderilir, embed URL AES ile şifreli dönüyor.
+        val embedUrlRaw = fetchEmbedUrl(data, userAgent)
 
         if (embedUrlRaw.isNullOrEmpty()) {
-            Log.e("DZP", "Embed URL config JSON'dan çıkarılamadı! JSON: $configJson")
+            Log.e("DZP", "Embed URL çözülemedi!")
             return false
         }
 
