@@ -61,13 +61,16 @@ subprojects {
         }
 
         compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_1_8
-            targetCompatibility = JavaVersion.VERSION_1_8
+            sourceCompatibility = JavaVersion.VERSION_11
+            targetCompatibility = JavaVersion.VERSION_11
         }
 
         tasks.withType<KotlinJvmCompile>().configureEach {
             compilerOptions {
-                jvmTarget.set(JvmTarget.JVM_1_8)
+                // cloudstream3:pre-release JVM 11 ile derleniyor; 1.8'e alçaltılırsa
+                // "Cannot inline bytecode built with JVM target 11" hatası veriyor (CI'da
+                // DiziPalOriginal cs3'ü bu yüzden üretilmiyordu).
+                jvmTarget.set(JvmTarget.JVM_11)
                 freeCompilerArgs.addAll(
                     "-Xno-call-assertions",
                     "-Xno-param-assertions",
