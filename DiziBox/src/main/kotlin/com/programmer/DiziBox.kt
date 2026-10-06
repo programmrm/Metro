@@ -10,6 +10,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.StringUtils.decodeUri
+import java.net.URLEncoder
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
@@ -63,6 +64,30 @@ class DiziBox : MainAPI() {
         headers = commonHeaders,
         interceptor = interceptor,
     )
+
+    /**
+     * Cloudflare, CloudStream'ın afiş görsellerini yüklerken kullandığı User-Agent'ı
+     * (Chrome/149.0.0.0) site içi görsellerde 403 ile engelliyor.
+     * Bu yüzden posterler DuckDuckGo görsel proxy'si üzerinden isteniyor.
+     */
+    private fun proxyPoster(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        return "https://external-content.duckduckgo.com/iu/?u=" +
+            URLEncoder.encode(url.trim(), "UTF-8")
+    }
+
+    /** img[data-src] ya da img[src] değerini alır (data: URI placeholder'ları hariç). */
+    private fun Element.posterSource(): String? {
+        val img = this.selectFirst("img") ?: return null
+        return img.attr("data-src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+            ?: img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+    }
+
+    /** div.box-image içindeki background-image: url(...) değerini çeker. */
+    private fun Element.backgroundImageUrl(): String? {
+        val style = this.selectFirst("div.box-image")?.attr("style") ?: return null
+        return Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""").find(style)?.groupValues?.get(1)
+    }
 
     override val mainPage = mainPageOf(
         "${mainUrl}/tum-bolumler/page/SAYFA/?tip=populer" to "Popüler Dizilerden Son Bölümler",
@@ -135,11 +160,13 @@ class DiziBox : MainAPI() {
         val title = link.attr("title").trim()
             .ifEmpty { link.text().trim() }
             .ifEmpty { return null }
-        val posterUrl = fixUrlNull(
-            this.selectFirst("img.afis, a.figure-link img, figure a img[data-src]")?.let { img ->
-                img.attr("data-src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
-                    ?: img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
-            }
+        val posterUrl = proxyPoster(
+            fixUrlNull(
+                this.selectFirst("img.afis, a.figure-link img, figure a img[data-src]")?.let { img ->
+                    img.attr("data-src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                        ?: img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                }
+            )
         )
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
             this.posterUrl = posterUrl
@@ -150,11 +177,7 @@ class DiziBox : MainAPI() {
         val link = this.selectFirst("h3 a, a.poster-title, figure a[href]") ?: return null
         val title = link.text().trim().ifEmpty { link.attr("title").trim() }.ifEmpty { return null }
         val href = fixUrlNull(link.attr("href")) ?: return null
-        val posterUrl = fixUrlNull(
-            this.selectFirst("img")?.let { img ->
-                img.attr("data-src").takeIf { it.isNotBlank() } ?: img.attr("src")
-            }
-        )
+        val posterUrl = proxyPoster(fixUrlNull(this.posterSource()))
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = posterUrl }
     }
 
@@ -183,12 +206,22 @@ class DiziBox : MainAPI() {
         }
 
         val title       = document.selectFirst("div.tv-overview h1 a")?.text()?.trim() ?: return null
-        val poster      = fixUrlNull(document.selectFirst("div.tv-overview figure img")?.attr("src"))
+        val poster      = proxyPoster(fixUrlNull(document.selectFirst("div.tv-overview figure img")?.let { img ->
+            img.attr("data-src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                ?: img.attr("src").takeIf { it.isNotBlank() && !it.startsWith("data:") }
+        }))
         val description = document.selectFirst("div.tv-story p")?.text()?.trim()
         val year        = document.selectFirst("a[href*='/yil/']")?.text()?.trim()?.toIntOrNull()
         val tags        = document.select("a[href*='/tur/']").map { it.text() }
         val actors      = document.select("a[href*='/oyuncu/']").map { Actor(it.text()) }
         val trailer     = document.selectFirst("div.tv-overview iframe")?.attr("src")
+
+        // Bölüm kartlarının afişleri (background-image) sadece dizi sayfasında var
+        val episodePosters = document.select("article.grid-box").mapNotNull { box ->
+            val boxHref = fixUrlNull(box.selectFirst("div.post-title a")?.attr("href")) ?: return@mapNotNull null
+            val boxImg  = fixUrlNull(box.backgroundImageUrl()) ?: return@mapNotNull null
+            boxHref to proxyPoster(boxImg)
+        }.toMap()
 
         val episodeList = mutableListOf<Episode>()
         document.select("div#seasons-list a").forEach {
@@ -202,9 +235,10 @@ class DiziBox : MainAPI() {
                 val epEpisode = Regex("""(\d+)\. ?Bölüm""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull()
 
                 episodeList.add(newEpisode(epHref) {
-                    this.name = epTitle
-                    this.season = epSeason
-                    this.episode = epEpisode
+                    this.name      = epTitle
+                    this.season    = epSeason
+                    this.episode   = epEpisode
+                    this.posterUrl = episodePosters[epHref]
                 })
             }
         }
@@ -226,7 +260,7 @@ class DiziBox : MainAPI() {
             ?: return null
         val episodeTitle = document.selectFirst("span.tv-title-episode")?.text()?.trim()
         val title = if (episodeTitle != null) "$seriesName $episodeTitle" else seriesName
-        val poster = fixUrlNull(document.selectFirst("meta[property=og:image]")?.attr("content"))
+        val poster = proxyPoster(fixUrlNull(document.selectFirst("meta[property=og:image]")?.attr("content")))
         val description = fixUrlNull(document.selectFirst("meta[property=og:description]")?.attr("content"))
         val season = Regex("""(\d+)\. ?Sezon""").find(episodeTitle ?: "")?.groupValues?.get(1)?.toIntOrNull() ?: 1
         val episode = Regex("""(\d+)\. ?Bölüm""").find(episodeTitle ?: "")?.groupValues?.get(1)?.toIntOrNull()
@@ -235,6 +269,7 @@ class DiziBox : MainAPI() {
             this.name = episodeTitle ?: title
             this.season = season
             this.episode = episode
+            this.posterUrl = poster
         })
 
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
