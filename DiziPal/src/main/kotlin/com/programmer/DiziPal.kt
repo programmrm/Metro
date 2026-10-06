@@ -29,7 +29,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class DiziPal : MainAPI() {
-    override var mainUrl              = "https://dizipal1582.com"
+    override var mainUrl              = "https://dizipal1587.com"
     override var name                 = "DiziPal"
     override val hasMainPage          = true
     override var lang                 = "tr"
@@ -71,35 +71,7 @@ class DiziPal : MainAPI() {
         "${mainUrl}/kanal/tod"                                     to "TOD (beIN)",
         "${mainUrl}/kanal/tabii"                                   to "Tabii",
         "${mainUrl}/kanal/hulu"                                    to "Hulu",
-        //"${mainUrl}/diziler?kelime=&durum=&tur=26&type=&siralama=" to "Anime",
-        //"${mainUrl}/diziler?kelime=&durum=&tur=5&type=&siralama="  to "Bilimkurgu Dizileri",
-        //"${mainUrl}/tur/bilimkurgu"                                to "Bilimkurgu Filmleri",
-        //"${mainUrl}/diziler?kelime=&durum=&tur=11&type=&siralama=" to "Komedi Dizileri",
-        //"${mainUrl}/tur/komedi"                                    to "Komedi Filmleri",
-        //"${mainUrl}/diziler?kelime=&durum=&tur=4&type=&siralama="  to "Belgesel Dizileri",
-        //"${mainUrl}/tur/belgesel"                                  to "Belgesel Filmleri",
-        //"${mainUrl}/diziler?kelime=&durum=&tur=25&type=&siralama=" to "Erotik Diziler",
-        //"${mainUrl}/tur/erotik"                                    to "Erotik Filmler",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=1&type=&siralama="  to "Aile",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=2&type=&siralama="  to "Aksiyon",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=3&type=&siralama="  to "Animasyon",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=4&type=&siralama="  to "Belgesel",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=6&type=&siralama="  to "Biyografi",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=7&type=&siralama="  to "Dram",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=8&type=&siralama="  to "Fantastik",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=9&type=&siralama="  to "Gerilim",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=10&type=&siralama=" to "Gizem",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=12&type=&siralama=" to "Korku",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=13&type=&siralama=" to "Macera",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=14&type=&siralama=" to "Müzik",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=16&type=&siralama=" to "Romantik",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=17&type=&siralama=" to "Savaş",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=24&type=&siralama=" to "Yerli",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=18&type=&siralama=" to "Spor",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=19&type=&siralama=" to "Suç",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=20&type=&siralama=" to "Tarih",
-        // "${mainUrl}/diziler?kelime=&durum=&tur=21&type=&siralama=" to "Western",
-    )
+            )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get(
