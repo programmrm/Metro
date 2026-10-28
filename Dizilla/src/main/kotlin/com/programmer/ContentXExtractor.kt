@@ -25,6 +25,10 @@ open class ContentX : ExtractorApi() {
         Log.d("Kekik_${this.name}", "url » $url")
 
         val iSource  = app.get(url, referer=extRef).text
+
+        // Yeni "NP" oynatıcı (four.pichive.online): window.NP_CONFIG = {...}
+        if (parseNpConfig(iSource, subtitleCallback, callback)) return
+
         val iExtract = Regex("""window\.openPlayer\('([^']+)'""").find(iSource)?.groups?.get(1)?.value ?: run {
             Log.e("Kekik_${this.name}", "openPlayer ID not found")
             return
@@ -255,5 +259,82 @@ open class ContentX : ExtractorApi() {
                 Log.d("Kekik_${this.name}", "M3U8 subtitle extraction error: ${e.message}")
             }
         }
+    }
+
+    /**
+     * four.pichive.online yeni oynatıcısı: iframe sayfasında window.NP_CONFIG = {...} gelir.
+     * sources[].master (nm.php) ve subtitles[].url (nsub.php) yalnızca kendi origin'inden
+     * gelen Referer ile cevap verir; aksi halde 404 döner.
+     */
+    private suspend fun parseNpConfig(
+        iSource: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val marker = iSource.indexOf("window.NP_CONFIG")
+        if (marker < 0) return false
+        val brace = iSource.indexOf('{', marker)
+        if (brace < 0) return false
+
+        val config = runCatching { mapper.readTree(iSource.substring(brace)) }.getOrNull() ?: return false
+        var created = false
+
+        val sources = config.get("sources")
+        if (sources != null && sources.isArray) {
+            for (node in sources) {
+                val master = node.get("master")?.asText()?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+                val title = node.get("title")?.asText()?.trim()?.takeIf { it.isNotEmpty() } ?: this.name
+                val referer = originOf(master)
+                val quality = Regex("""(\d{3,4})[pP]""").find(title)?.groupValues?.get(1)?.toIntOrNull()
+                    ?: Qualities.Unknown.value
+                Log.d("Kekik_${this.name}", "NP master: $title → $master (referer $referer)")
+                callback.invoke(
+                    newExtractorLink(
+                        source  = this.name,
+                        name    = "${this.name} - $title",
+                        url     = master,
+                        type    = ExtractorLinkType.M3U8
+                    ) {
+                        this.referer = referer
+                        this.quality = quality
+                    }
+                )
+                created = true
+            }
+        }
+
+        val subtitles = config.get("subtitles")
+        if (subtitles != null && subtitles.isArray) {
+            for (node in subtitles) {
+                val subUrl = node.get("url")?.asText()?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+                val lang = node.get("lang")?.asText()?.trim()?.takeIf { it.isNotEmpty() } ?: "tr"
+                val label = node.get("label")?.asText()?.trim()?.takeIf { it.isNotEmpty() } ?: lang
+                Log.d("Kekik_${this.name}", "NP altyazı: $label → $subUrl")
+                subtitleCallback.invoke(
+                    newSubtitleFile(
+                        lang = label,
+                        url  = subUrl
+                    ) {
+                        headers = mapOf(
+                            "Referer" to originOf(subUrl),
+                            "User-Agent" to USER_AGENT
+                        )
+                    }
+                )
+            }
+        }
+
+        Log.d("Kekik_${this.name}", "NP oynatıcı: link=${if (created) "var" else "yok"}")
+        return created
+    }
+
+    private fun originOf(url: String): String {
+        val host = Regex("""^https?://([^/]+)""").find(url)?.groupValues?.getOrNull(1) ?: return ""
+        return "https://$host/"
+    }
+
+    companion object {
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
 }
