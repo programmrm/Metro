@@ -266,15 +266,24 @@ class DiziPalOriginal : MainAPI() {
      * Token kısa sürede ölebiliyor, bu yüzden taze sayfa ile 2 deneme yapıyoruz.
      */
     private suspend fun fetchEmbedUrl(episodeUrl: String, userAgent: String): String? {
+        val browserHeaders = mapOf(
+            "User-Agent"              to userAgent,
+            "Accept"                  to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language"         to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control"           to "no-cache",
+            "Pragma"                  to "no-cache",
+            "Upgrade-Insecure-Requests" to "1",
+            "Sec-Fetch-Dest"          to "document",
+            "Sec-Fetch-Mode"          to "navigate",
+            "Sec-Fetch-Site"          to "none",
+            "Sec-Fetch-User"          to "?1"
+        )
+
         for (attempt in 1..2) {
             try {
                 val getResponse = app.get(
                     url = episodeUrl,
-                    headers = mapOf(
-                        "User-Agent"    to userAgent,
-                        "Cache-Control" to "no-cache",
-                        "Pragma"        to "no-cache"
-                    )
+                    headers = browserHeaders
                 )
 
                 val configToken = getResponse.document
@@ -292,8 +301,13 @@ class DiziPalOriginal : MainAPI() {
                     data    = mapOf("cfg" to configToken),
                     headers = mapOf(
                         "User-Agent"       to userAgent,
+                        "Accept"           to "*/*",
+                        "Accept-Language"  to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Origin"           to mainUrl,
                         "X-Requested-With" to "XMLHttpRequest",
-                        "Accept"           to "*/*"
+                        "Sec-Fetch-Dest"   to "empty",
+                        "Sec-Fetch-Mode"   to "cors",
+                        "Sec-Fetch-Site"   to "same-origin"
                     ),
                     referer = episodeUrl,
                     cookies = getResponse.cookies
