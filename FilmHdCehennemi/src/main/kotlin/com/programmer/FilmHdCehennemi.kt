@@ -272,7 +272,9 @@ class FilmHdCehennemi : MainAPI() {
 
         parseEmbedSubtitles(page, embedUrl, subtitleCallback)
 
-        val videoUrl = decodeSourcesUrl(page)
+        // Embed JS'i hash hesabına self.location.hostname değerini katıyor
+        val embedHost = runCatching { java.net.URI(embedUrl).host }.getOrNull() ?: ""
+        val videoUrl = decodeSourcesUrl(page, embedHost)
             ?: runLegacyAssignDecode(page)
 
         if (videoUrl == null || !videoUrl.startsWith("http")) {
@@ -315,7 +317,7 @@ class FilmHdCehennemi : MainAPI() {
     }
 
     /** sources: [{file: VAR}] -> var VAR = fn("...".split("sep")) */
-    private fun decodeSourcesUrl(html: String): String? {
+    private fun decodeSourcesUrl(html: String, hostname: String = ""): String? {
         val fileVar = Regex("""sources:\s*\[\{\s*file:\s*(\w+)""").find(html)?.groupValues?.get(1)
             ?: return null
         val call = Regex("""var\s+${Regex.escape(fileVar)}\s*=\s*(\w+)\s*\(""").find(html)
@@ -326,10 +328,10 @@ class FilmHdCehennemi : MainAPI() {
             ?: return null
         val parts = arg.groupValues[1].split(arg.groupValues[2])
         val body = extractFunctionBody(html, fnName) ?: return null
-        return runCatching { decodeStage2(parts, body) }.getOrNull()
+        return runCatching { decodeStage2(parts, body, hostname) }.getOrNull()
     }
 
-    private fun decodeStage2(parts0: List<String>, body: String): String? {
+    private fun decodeStage2(parts0: List<String>, body: String, hostname: String = ""): String? {
         val parts = parts0.toMutableList()
         val n = parts.size - 2
         if (n < 0) return null
@@ -338,7 +340,9 @@ class FilmHdCehennemi : MainAPI() {
         if (de9 !in parts.indices) return null
         val opStr = parts.removeAt(de9)
         if (th5i !in parts.indices) return null
-        val hashStr = parts.removeAt(th5i)
+        // Gömülü JS: b4me += self.location.hostname (hash bu değerle hesaplanıyor)
+        val hashStr = parts.removeAt(th5i) +
+            if (body.contains("self.location")) hostname else ""
         var data = parts.joinToString("")
 
         val pair = Regex("""var\s+(\w+)\s*=\s*\w+\.splice\([^)]+\)\s*\[0\]\s*,\s*(?:var\s+)?(\w+)\s*=\s*\w+\.splice""")
