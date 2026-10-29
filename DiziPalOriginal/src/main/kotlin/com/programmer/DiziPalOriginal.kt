@@ -455,6 +455,7 @@ class DiziPalOriginal : MainAPI() {
 
                 Log.d("DZP", "Imagestoo Çözülen Video Kaynağı » $finalM3u8Url")
 
+                val imgOrigin = Regex("""^https?://[^/]+""").find(embedUrl)?.value ?: embedUrl
                 callback.invoke(
                     newExtractorLink(
                         source = this.name,
@@ -462,8 +463,15 @@ class DiziPalOriginal : MainAPI() {
                         url = finalM3u8Url,
                         type = ExtractorLinkType.M3U8
                     ) {
-                        referer = mapOf("Referer" to embedUrl).toString()
-                        headers= mapOf("Cookie" to sessionCookie)
+                        referer = embedUrl
+                        headers = mapOf(
+                            "Referer" to embedUrl,
+                            "Origin" to imgOrigin,
+                            "Sec-Fetch-Dest" to "empty",
+                            "Sec-Fetch-Mode" to "cors",
+                            "Sec-Fetch-Site" to "cross-site",
+                            "Cookie" to sessionCookie
+                        )
                         quality = Qualities.Unknown.value
                     }
                 )
@@ -530,6 +538,17 @@ class DiziPalOriginal : MainAPI() {
 
         Log.d("DZP", "Bulunan M3U8 » $finalM3u8Url")
 
+        val embedOrigin = Regex("""^https?://[^/]+""").find(embedUrl)?.value ?: embedUrl
+        // CDN (superadjacentsoddenly) tarayici olmayan isteklerde 403 donuyor;
+        // m3u8 icin Referer + Sec-Fetch-* basliklari gerekli.
+        val streamHeaders = mapOf(
+            "Referer" to embedUrl,
+            "Origin" to embedOrigin,
+            "Sec-Fetch-Dest" to "empty",
+            "Sec-Fetch-Mode" to "cors",
+            "Sec-Fetch-Site" to "cross-site"
+        )
+
         callback.invoke(
             newExtractorLink(
                 source = this.name,
@@ -538,6 +557,7 @@ class DiziPalOriginal : MainAPI() {
                 type = ExtractorLinkType.M3U8
             ) {
                 referer = embedUrl
+                headers = streamHeaders
                 quality = Qualities.Unknown.value
             }
         )
