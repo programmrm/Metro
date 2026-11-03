@@ -13,11 +13,10 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
 class DiziPal : MainAPI() {
-    override var mainUrl              = "https://dizipal1592.com"
+    override var mainUrl              = "https://dizipal1593.com"
     override var name                 = "DiziPal"
     override val hasMainPage          = true
     override var lang                 = "tr"
@@ -62,19 +61,26 @@ class DiziPal : MainAPI() {
         "Sec-Fetch-User" to "?1",
     )
 
-    private val homeSections = setOf("Yeni Diziler", "Filmler")
-
     override val mainPage = mainPageOf(
-        "${mainUrl}/yabanci-dizi-izle"              to "Yeni Diziler",
-        "${mainUrl}/yeni-eklenen-dizi-bolumler"     to "Son Bölümler",
-        "${mainUrl}/film-izle"                      to "Filmler",
-        "${mainUrl}/kanal/netflix"                  to "Netflix",
-        "${mainUrl}/kanal/exxen"                    to "Exxen",
-        "${mainUrl}/kanal/max"                      to "Max",
-        "${mainUrl}/kanal/disney"                   to "Disney+",
-        "${mainUrl}/kanal/amazon"                   to "Amazon Prime",
-        "${mainUrl}/kanal/tod"                      to "TOD (beIN)",
-        "${mainUrl}/kanal/tabii"                    to "Tabii",
+        "${mainUrl}/altyazili-bolumler" to "Yeni Eklenen Bölümler (Altyazılı)",
+        "${mainUrl}/dublaj-bolumler"    to "Yeni Eklenen Bölümler (Dublajlı)",
+        "${mainUrl}/yabanci-dizi-izle?tur=1"  to "Suç Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=4"  to "Dram Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=3"  to "Komedi Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=7"  to "Gizem Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=19" to "Animasyon Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=22" to "Korku Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=15" to "Gerilim Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=13" to "Aksiyon Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=8"  to "Romantik Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=17" to "Bilim Kurgu Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=21" to "Fantastik Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=18" to "Macera Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=20" to "Aile Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=6"  to "Tarih Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?tur=12" to "Belgesel Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?imdb=8-10&orderby=imdb" to "IMDb 8+ Dizileri",
+        "${mainUrl}/yabanci-dizi-izle?imdb=7-10&orderby=imdb" to "IMDb 7+ Dizileri",
     )
 
     private suspend fun fetch(url: String): Document? = try {
@@ -87,12 +93,26 @@ class DiziPal : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val name = request.name
         try {
-            if (page > 1) return newHomePageResponse(name, emptyList(), false)
-            val doc = fetch(request.data) ?: return newHomePageResponse(name, emptyList(), false)
-            val items = if (name in homeSections) parseCards(doc) else parseEpisodeCards(doc)
-                .ifEmpty { parseCards(doc) }
-            Log.d("DZP", "$name: ${items.size} öğe")
-            return newHomePageResponse(name, items, false)
+            val url = if (page > 1) {
+                val sep = if (request.data.contains("?")) "&" else "?"
+                "${request.data}${sep}page=$page"
+            } else request.data
+
+            val doc = fetch(url) ?: return newHomePageResponse(name, emptyList(), false)
+            val items = if (name.startsWith("Yeni Eklenen Bölümler")) {
+                // /altyazili-bolumler ve /dublaj-bolumler sayfalarındaki karışık
+                // kartları (ör. "altyazı ve dublaj") etikete göre ele.
+                val wantSub = name.contains("Altyazılı")
+                parseEpisodeCards(doc) { label ->
+                    if (wantSub) label.contains("altyazı", ignoreCase = true)
+                    else label.contains("dublaj", ignoreCase = true)
+                }
+            } else {
+                // Tür/IMDb filtresi sunucu tarafında (?tur=<id>, ?imdb=min-max) uygulanıyor.
+                parseCards(doc)
+            }
+            Log.d("DZP", "$name (sayfa $page): ${items.size} öğe")
+            return newHomePageResponse(name, items, items.isNotEmpty())
         } catch (e: Exception) {
             Log.e("DZP", "getMainPage error: ${e.message}")
             return newHomePageResponse(name, emptyList(), false)
@@ -137,29 +157,42 @@ class DiziPal : MainAPI() {
         return items
     }
 
-    /** a.ecl kartları: /bolum/<slug>-<s>x<e> → dizi sayfasına yönlendirilir */
-    private fun parseEpisodeCards(doc: Document): List<SearchResponse> {
+    /**
+     * a.ecl kartları: href="/bolum/<slug>-<s>x<e>" → "/series/<slug>".
+     * Bölüm slug'ı dizi slug'ının sonuna "-<s>x<e>" eklenmiş halidir;
+     * site farklıysa (ör. gassal-c11) /series/<slug> 301 ile doğru adrese yönlendirir.
+     */
+    private fun parseEpisodeCards(
+        doc: Document,
+        labelFilter: (String) -> Boolean = { true }
+    ): List<SearchResponse> {
         val seen = mutableSetOf<String>()
         val items = mutableListOf<SearchResponse>()
 
         for (card in doc.select("a.ecl[href]")) {
-            val path = card.attr("href")
+            val path = card.attr("href").substringBefore("?")
             if (!path.startsWith("/bolum/")) continue
             val label = card.attr("aria-label")
+            if (!labelFilter(label)) continue
             // "Dizi Adı, 4. Sezon 1. Bölüm, dublaj" -> "Dizi Adı"
             val title = label.replace(EP_CARD_SUFFIX_REGEX, "").trim().ifEmpty {
                 card.selectFirst(".ett, .ttl, .tt")?.text()?.trim().orEmpty()
             }
             if (title.isEmpty()) continue
 
-            val seriesPath = SERIES_PATH_REGEX.find(path)?.value ?: continue
-            val url = fixUrlNull(seriesPath) ?: continue
+            val slug = path.removePrefix("/bolum/")
+            if (!EP_SUFFIX_REGEX.containsMatchIn(slug)) continue
+            val url = fixUrlNull("/series/${slug.replace(EP_SUFFIX_REGEX, "")}") ?: continue
             if (!seen.add(url)) continue
 
-            val year = Regex("""\b(19\d{2}|20\d{2})\b""").find(label)?.value?.toIntOrNull()
+            val year = YEAR_REGEX.find(label)?.value?.toIntOrNull()
             items.add(
                 newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
-                    this.posterUrl = fixUrlNull(card.selectFirst("img")?.attr("src"))
+                    // a.ecl boş bir overlay'dir; görsel kartın (div.ec) içinde durur.
+                    this.posterUrl = fixUrlNull(
+                        card.selectFirst("img")?.attr("src")
+                            ?: card.parent()?.selectFirst("img")?.attr("src")
+                    )
                     this.year = year
                 }
             )
@@ -396,8 +429,9 @@ class DiziPal : MainAPI() {
     }
 
     companion object {
-        private val SERIES_PATH_REGEX = Regex("""/series/[a-z0-9-]+""")
         private val SEASON_URL_REGEX = Regex("""/sezon-(\d+)""")
+        private val YEAR_REGEX = Regex("""(?:19|20)\d{2}""")
+        private val EP_SUFFIX_REGEX = Regex("""-\d+x\d+$""")
         private val PLAYER_HREF_REGEX = Regex("""\"href\":\"([^\"]*\?player=[^\"]+)\"""")
         private val EP_CARD_SUFFIX_REGEX = Regex(""",\s*\d+\.\s*Sezon[\s\S]*$""")
     }
