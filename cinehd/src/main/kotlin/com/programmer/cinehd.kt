@@ -161,29 +161,46 @@ class Cinehd : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page > 1) "${request.data}?page=$page" else request.data
         val document = fetchDocument(url) ?: return newHomePageResponse(request.name, emptyList(), false)
-        val items = document.select("a.poster[data-token], div.poster[data-token]")
-            .mapNotNull { it.toSearchResponse() }
-        return newHomePageResponse(request.name, items)
+        val slides = document.select("div.swiper-slide")
+        val items = mutableListOf<SearchResponse>()
+        for (slide in slides) {
+            val img = slide.selectFirst("img")
+            if (img == null) continue
+            val posterUrl = fixUrlNull(img.attr("src"))
+            val title = img.attr("alt") ?: continue
+
+            val bottom = slide.selectFirst("div.bottom-[20%], div.text-white")
+            val year = bottom?.selectFirst("span")?.text()?.trim()?.takeIf { it.length >= 4 }?.take(4)?.toIntOrNull() ?: null
+            val ratingText = bottom?.selectFirst("span")?.text()?.trim()?.takeIf { it.contains("/") } ?: ""
+            val rating = ratingText.split("/", " ")[0].toFloatOrNull()?.let { Score.from10(it) }
+
+            if (title.isNotBlank()) {
+                val movieId = slide.selectFirst("a")?.attr("href")?.replace("/movie/", "") ?: ""
+                newMovieSearchResponse(title, "${mainUrl}/movie/$movieId", TvType.Movie) {
+                    this.posterUrl = posterUrl
+                    this.year = year
+                    this.score = rating
+                }?.let { items.add(it) }
+            }
+        }
+        return newHomePageResponse(request.name, items, false)
     }
 
     private fun Element.toSearchResponse(): SearchResponse? {
         val href = fixUrlNull(this.attr("href")) ?: return null
-        val title = this.attr("title").ifEmpty {
-            this.selectFirst(".poster-title")?.text()?.trim()
-        } ?: return null
+        val title = this.selectFirst("img")?.attr("alt") ?: this.selectFirst(".title, h4, .search-result-title")?.text()?.trim() ?: return null
 
-        val img = this.selectFirst(".poster-wrapper img, img")
+        val img = this.selectFirst("img")
         val posterUrl = fixUrlNull(
-            img?.attr("data-src").takeIf { it?.isNotBlank() == true }
-                ?: img?.attr("src").takeIf { it?.isNotBlank() == true && !it.contains("data:image") }
+            img?.attr("src").takeIf { it?.isNotBlank() == true }
         )
 
-        val info = this.selectFirst(".poster-info, .poster-meta, .poster-content")
-        val year = info?.selectFirst("span.year")?.text()?.trim()?.toIntOrNull()
-            ?: info?.selectFirst(".poster-meta span")?.text()?.trim()?.toIntOrNull()
-        val rating = info?.selectFirst(".imdb")?.text()?.trim()?.toFloatOrNull()
+        val year = this.selectFirst("span.year")?.text()?.trim()?.toIntOrNull()
+            ?: this.selectFirst(".year")?.text()?.trim()?.toIntOrNull()
 
-        val isSeries = href.contains("/dizi/")
+        val rating = this.selectFirst(".imdb")?.text()?.trim()?.toFloatOrNull()
+
+        val isSeries = href.contains("/dizi/") || title?.contains("Dizi", ignoreCase = true) == true
 
         return if (isSeries) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
