@@ -3,6 +3,8 @@
 package com.programmer
 
 import android.util.Base64
+import android.util.Log
+import android.webkit.CookieManager
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.cloudstream3.*
@@ -10,9 +12,13 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.network.CloudflareKiller
+import com.lagradost.cloudstream3.network.WebViewResolver
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
+import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -25,23 +31,137 @@ class FilmHdCehennemi : MainAPI() {
     override val hasQuickSearch       = true
     override val supportedTypes       = setOf(TvType.Movie, TvType.TvSeries)
 
+    // Ana sayfa bolumleri tek tek yuklenir: Cloudflare challenge ilk istekte WebView ile
+    // cozuldugu icin sonraki istekler cookie ile aninda gelir, ard arda istek yapilinca
+    // her birinde WebView bekleniyordu.
+    override var sequentialMainPage       = true
+    override var sequentialMainPageDelay  = 200L
+    override var sequentialMainPageScrollDelay = 200L
+
     private val mapper by lazy { jacksonObjectMapper() }
     private val cloudflareKiller by lazy { CloudflareKiller() }
-    private val interceptor      by lazy { CloudflareInterceptor(cloudflareKiller) }
+    private val interceptor      by lazy { CloudflareInterceptor(cloudflareKiller, mainUrl) }
 
-    class CloudflareInterceptor(private val cloudflareKiller: CloudflareKiller) : Interceptor {
+    private val pageHeaders = mapOf(
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Upgrade-Insecure-Requests" to "1",
+        "Sec-Fetch-Dest" to "document",
+        "Sec-Fetch-Mode" to "navigate",
+        "Sec-Fetch-Site" to "none",
+        "Sec-Fetch-User" to "?1"
+    )
+
+    private suspend fun fetchDocument(url: String, referer: String? = null): Document? = try {
+        app.get(
+            url,
+            headers = pageHeaders,
+            referer = referer,
+            interceptor = interceptor,
+            timeout = REQUEST_TIMEOUT_S
+        ).document
+    } catch (e: Exception) {
+        Log.e(TAG, "fetch error ($url): ${e.message}")
+        null
+    }
+
+    class CloudflareInterceptor(
+        private val cloudflareKiller: CloudflareKiller,
+        mainUrl: String
+    ) : Interceptor {
+        private val siteHost = runCatching { java.net.URI(mainUrl).host ?: "" }.getOrDefault("")
+
+        @Volatile
+        private var lastSolveAttemptMs = 0L
+
         override fun intercept(chain: Interceptor.Chain): Response {
-            val request  = chain.request()
-            val response = chain.proceed(request)
-            val body = runCatching { response.peekBody(256 * 1024).string() }.getOrDefault("")
-            if (response.code in listOf(403, 429, 503) ||
-                body.contains("Just a moment", ignoreCase = true) ||
-                Jsoup.parse(body).selectFirst("meta[name='cloudflare']") != null
-            ) {
-                return cloudflareKiller.intercept(chain)
+            val request = chain.request()
+
+            // Embed/CDN isteklerinde cloudflare cozumu denenmez, dogrudan gonderilir.
+            if (request.url.host != siteHost) return chain.proceed(request)
+
+            val response = chain.proceed(withSavedCookies(request))
+            if (!isChallenge(response)) return response
+
+            // Cozum denemesi araliksiz yapilmaz: ana sayfa bolumleri ardisik geldigi icin
+            // her istekte WebView acilirsa toplam sure CloudStream'in zaman asimini asar.
+            if (System.currentTimeMillis() - lastSolveAttemptMs < SOLVE_INTERVAL_MS) return response
+            lastSolveAttemptMs = System.currentTimeMillis()
+
+            response.close()
+            cloudflareKiller.savedCookies.remove(siteHost)
+
+            if (solveChallenge(request.url.toString())) {
+                val retried = chain.proceed(withSavedCookies(request))
+                if (!isChallenge(retried)) return retried
+                retried.close()
+                cloudflareKiller.savedCookies.remove(siteHost)
             }
-            return response
+
+            // Cozulemeyen challenge'da hata yerine challenge sayfasi doner (bos icerik).
+            return chain.proceed(request)
         }
+
+        private fun withSavedCookies(request: Request): Request {
+            if (cloudflareKiller.savedCookies[siteHost].isNullOrEmpty()) return request
+            return runCatching {
+                val builder = request.newBuilder()
+                cloudflareKiller.getCookieHeaders(request.url.toString())
+                    .toMultimap()
+                    .forEach { (name, values) ->
+                        val value = values.firstOrNull() ?: return@forEach
+                        builder.header(name, value)
+                    }
+                builder.build()
+            }.getOrDefault(request)
+        }
+
+        private fun isChallenge(response: Response): Boolean {
+            if (response.code != 403 && response.code != 503) return false
+            if (response.header("cf-mitigated").equals("challenge", true)) return true
+            val body = runCatching { response.peekBody(CHALLENGE_PEEK_LIMIT).string() }.getOrDefault("")
+            return body.contains("Just a moment", ignoreCase = true)
+        }
+
+        private fun solveChallenge(url: String): Boolean {
+            if (adoptCookies(url)) return true
+            return runCatching {
+                runBlocking {
+                    WebViewResolver(
+                        // hicbir url'de durma: cf_clearance cookie'si gelince cikiyoruz
+                        Regex(".^"),
+                        listOf(Regex(".")),
+                        // cloudflare varsayilan user agent'ini istiyor
+                        null,
+                        // okhttp kullanilirsa cookie'ler yakalanamiyor
+                        false,
+                        null,
+                        null,
+                        CHALLENGE_TIMEOUT_MS
+                    ).resolveUsingWebView(url, null, "GET") { adoptCookies(url) }
+                }
+                adoptCookies(url)
+            }.getOrDefault(false)
+        }
+
+        private fun adoptCookies(url: String): Boolean {
+            val cookie = runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull() ?: return false
+            if (!cookie.contains("cf_clearance")) return false
+            val parsed = parseCookies(cookie)
+            synchronized(cloudflareKiller.savedCookies) {
+                cloudflareKiller.savedCookies[siteHost] = parsed
+            }
+            return true
+        }
+
+        private fun parseCookies(raw: String): Map<String, String> = raw.split(";")
+            .mapNotNull { part ->
+                val idx = part.indexOf('=')
+                if (idx <= 0) null
+                else part.substring(0, idx).trim() to part.substring(idx + 1).trim()
+            }
+            .filter { it.first.isNotEmpty() && it.second.isNotEmpty() }
+            .toMap()
     }
 
     override val mainPage = mainPageOf(
@@ -56,7 +176,7 @@ class FilmHdCehennemi : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page > 1) "${request.data}?page=$page" else request.data
-        val document = app.get(url, interceptor = interceptor).document
+        val document = fetchDocument(url) ?: return newHomePageResponse(request.name, emptyList(), false)
         val items = document.select("a.poster[data-token], div.poster[data-token]")
             .mapNotNull { it.toSearchResponse() }
         return newHomePageResponse(request.name, items)
@@ -126,11 +246,17 @@ class FilmHdCehennemi : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val text = app.get(
-            "${mainUrl}/search?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8.name()),
-            headers = mapOf("X-Requested-With" to "fetch", "Content-Type" to "application/json"),
-            interceptor = interceptor
-        ).text
+        val text = try {
+            app.get(
+                "${mainUrl}/search?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8.name()),
+                headers = mapOf("X-Requested-With" to "fetch", "Content-Type" to "application/json"),
+                interceptor = interceptor,
+                timeout = REQUEST_TIMEOUT_S
+            ).text
+        } catch (e: Exception) {
+            Log.e(TAG, "search error: ${e.message}")
+            return emptyList()
+        }
         return runCatching {
             val root = mapper.readTree(text)
             val results = root.get("results")
@@ -145,7 +271,7 @@ class FilmHdCehennemi : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url, interceptor = interceptor).document
+        val document = fetchDocument(url) ?: return null
         val jsonLd = document.selectFirst("script[type='application/ld+json']")
         val root = runCatching { jsonLd?.data()?.let { mapper.readTree(it) } }.getOrNull()
 
@@ -253,7 +379,7 @@ class FilmHdCehennemi : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data, interceptor = interceptor).document
+        val document = fetchDocument(data) ?: return false
         val iframeEl = document.selectFirst(
             "iframe[data-src*='/video/embed/'], iframe[src*='/video/embed/'], " +
                 "iframe.close[data-src], iframe.close[src], iframe[data-src], iframe[src]"
@@ -268,7 +394,12 @@ class FilmHdCehennemi : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val page = app.get(embedUrl, referer = referer, interceptor = interceptor).text
+        val page = try {
+            app.get(embedUrl, referer = referer, interceptor = interceptor, timeout = REQUEST_TIMEOUT_S).text
+        } catch (e: Exception) {
+            Log.e(TAG, "embed error ($embedUrl): ${e.message}")
+            return false
+        }
 
         parseEmbedSubtitles(page, embedUrl, subtitleCallback)
 
@@ -472,8 +603,9 @@ class FilmHdCehennemi : MainAPI() {
     }
 
     private suspend fun parseM3u8Subtitles(m3u8Url: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit) {
-        val body = runCatching { app.get(m3u8Url, referer = referer, interceptor = interceptor).text }
-            .getOrNull() ?: return
+        val body = runCatching {
+            app.get(m3u8Url, referer = referer, interceptor = interceptor, timeout = REQUEST_TIMEOUT_S).text
+        }.getOrNull() ?: return
         Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES[^#]*?URI="([^"]+)"[^#]*?LANGUAGE="([^"]+)"""").findAll(body).forEach { m ->
             val lang = m.groupValues[2]
             val rawUri = m.groupValues[1]
@@ -627,6 +759,21 @@ class FilmHdCehennemi : MainAPI() {
     }
 
     companion object {
+        private const val TAG = "FilmHdCehennemi"
+
+        // Her istek cloudflare ile kisitlanirken kisa timeout: takilma durumunda
+        // CloudStream'in 120sn'lik istek basina zaman asimina girmeden donulur.
+        private const val REQUEST_TIMEOUT_S = 30L
+
+        // WebView acilma araligi: ana sayfa bolumleri ardisik gelir, her birinde
+        // challenge cozumu denenirse toplam sure zaman asimini asar.
+        private const val SOLVE_INTERVAL_MS = 30_000L
+
+        // CloudflareKiller 60sn bekliyordu; 20sn'de donulur.
+        private const val CHALLENGE_TIMEOUT_MS = 20_000L
+
+        private const val CHALLENGE_PEEK_LIMIT = 64 * 1024L
+
         private val PACKER_START = Regex("""eval\(function\(p,a,c,k,e,d\)\{""")
         private val PACKER_ARGS = Regex(
             """\('(.+)',(\d+),(\d+),'(.+)'\.split\('\|'\),\s*0,\s*\{\}\)\)""",
