@@ -149,13 +149,16 @@ class Cinehd : MainAPI() {
         }
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/category/film-izle-2/"               to "Filmler",
-        "${mainUrl}/tur/bilim-kurgu-filmlerini-izleyin-5/" to "Bilim Kurgu",
-        "${mainUrl}/yabancidiziizle-5/"                  to "Diziler",
-        "${mainUrl}/film-robotu-1/"                      to "Keşfet",
-        "${mainUrl}/dil/turkce-dublajli-film-izleyin-5/" to "Türkçe Dublaj",
-        "${mainUrl}/yil/2026-filmleri-izle/"             to "2026 Yapımları",
-        "${mainUrl}/yil/2025-filmleri-izle-3/"           to "2025 Yapımları"
+        "${mainUrl}/api/search/discover?type=movie&sort=popularity&now_playing=true" to "Şimdi Vizyonda",
+        "${mainUrl}/api/search/discover?type=movie&sort=popularity&trending=true" to "Popüler Filmler",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&trending=true" to "Popüler Diziler",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&watch_provider=8" to "Netflix",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&watch_provider=9" to "Prime Video",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&watch_provider=350" to "Apple TV+",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&watch_provider=337" to "Disney+",
+        "${mainUrl}/api/search/discover?type=movie&sort=popularity&country=IN" to "Hindistan Filmleri",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&watch_provider=386" to "Peacock",
+        "${mainUrl}/api/search/discover?type=tv&sort=popularity&watch_provider=1899" to "Max"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
