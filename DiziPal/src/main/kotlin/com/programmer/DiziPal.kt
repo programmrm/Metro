@@ -225,9 +225,15 @@ class DiziPal : MainAPI() {
 
     private fun normalizeEpisodeUrl(raw: String?): String? {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val absolute = value.replace("http://$mainUrl/", "$mainUrl/")
-            .replace("https://$mainUrl/", "$mainUrl/")
-        return if (absolute.startsWith("http")) absolute else "$mainUrl/${absolute.trimStart('/')}"
+        // JSON-LD bölüm URL'leri http://dizipal... şeklinde geliyor; site https'te.
+        val host = mainUrl.removePrefix("https://").removePrefix("http://")
+        val hostSuz = value.removePrefix("http://").removePrefix("https://")
+        return when {
+            hostSuz.startsWith("$host/") -> "$mainUrl/${hostSuz.removePrefix("$host/")}"
+            value.startsWith("//")       -> "https:$value"
+            value.startsWith("http")     -> value
+            else                         -> "$mainUrl/${value.trimStart('/')}"
+        }
     }
 
     private suspend fun parseByJsonLd(doc: Document, url: String): LoadResponse? {
