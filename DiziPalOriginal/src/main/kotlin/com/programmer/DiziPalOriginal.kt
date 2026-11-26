@@ -12,7 +12,7 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 class DiziPalOriginal : MainAPI() {
-    override var mainUrl              = "https://dizipal2150.com"
+    override var mainUrl              = "https://dizipal2161.com"
     override var name                 = "DiziPalOriginal"
     override val hasMainPage          = true
     override var lang                 = "tr"
