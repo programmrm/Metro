@@ -18,7 +18,7 @@ except ImportError:  # alternatif: cloudscraper çoğu zaman 403 alır
     oturum = CloudScraper()
     istemci = "cloudscraper"
 
-mainUrl = "https://dizipal1598.com"
+mainUrl = "https://dizipal1599.com"
 
 print(f"istemci : {istemci}")
 print(f"mainUrl : {mainUrl}")

@@ -16,7 +16,7 @@ import org.jsoup.nodes.Document
 import java.net.URLEncoder
 
 class DiziPal : MainAPI() {
-    override var mainUrl              = "https://dizipal1598.com"
+    override var mainUrl              = "https://dizipal1599.com"
     override var name                 = "DiziPal"
     override val hasMainPage          = true
     override var lang                 = "tr"
